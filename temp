@@ -1,5 +1,3 @@
-CmdConfigs = {}
-CmdConfigs._G = {"toggleesp ,", "togglefly g"}
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -819,6 +817,7 @@ PlayerState.Pop()
 end
 local function startFreecam(pos)
 if S.fcRunning then stopFreecam() return end
+if S.viewing then stopView() end
 S.cameraFov = Camera.FieldOfView
 velSpring:Reset(Vector3.new()); panSpring:Reset(Vector2.new())
 PlayerState.Push()
@@ -1037,7 +1036,7 @@ if S.walkflingActive then
 stopWalkfling()
 else
 startWalkfling()
-if showNotify then showNotify("Walkfling: ON", C.ABUSE) end
+if S.walkflingActive and showNotify then showNotify("Walkfling: ON", C.ABUSE) end
 end
 end
 local function setToggleWalkflingKey(keyName)
@@ -1815,6 +1814,7 @@ return partPos + dirToMe * pull
 end
 local function startAura()
 if AuraS.active then return end
+if not S.abuseMode then return end
 AuraS.active = true
 cacheMeleeEvents()
 if not MeleeEvents.Hit then
@@ -2338,8 +2338,8 @@ if S.fcRunning then
 stopFreecam(); updateBtn("fc", false)
 if showNotify then showNotify("Freecam: OFF", C.SUBTEXT) end
 else
-startFreecam(); updateBtn("fc", true)
-if showNotify then showNotify("Freecam: ON", C.SUCCESS) end
+startFreecam(); updateBtn("fc", S.fcRunning)
+if S.fcRunning and showNotify then showNotify("Freecam: ON", C.SUCCESS) end
 end
 end
 end)
@@ -2373,7 +2373,7 @@ stopFly()
 if showNotify then showNotify("Fly: OFF", C.SUBTEXT) end
 else
 startFly()
-if showNotify then showNotify("Fly: ON", C.ABUSE) end
+if FlyS.flying and showNotify then showNotify("Fly: ON", C.ABUSE) end
 end
 end
 end)
@@ -2714,6 +2714,11 @@ end
 local function setAbuseMode(on)
 S.abuseMode = on
 updateAbuseInfoVisibility()
+if not on then
+if S.walkflingActive then stopWalkfling() end
+if AuraS.active then stopAura() end
+if FlyS.flying then stopFly() end
+end
 if on then
 pcall(function()
 if gui and gui.Parent then
@@ -3289,7 +3294,7 @@ stopFly()
 showNotify("Fly: OFF", C.SUBTEXT)
 else
 startFly()
-showNotify("Fly: ON", C.ABUSE)
+if FlyS.flying then showNotify("Fly: ON", C.ABUSE) end
 end
 elseif cmd == "unfly" or cmd == "nofly" then
 if not S.abuseMode then return end
@@ -3550,10 +3555,10 @@ setupDeathListener()
 end)
 setupDeathListener()
 startNpcEspLoop()
-if CmdConfigs and CmdConfigs._G then
+if _G.CmdConfigs then
 task.spawn(function()
 task.wait(1)
-for _, cmd in ipairs(CmdConfigs._G) do
+for _, cmd in ipairs(_G.CmdConfigs) do
 pcall(function() execCmd(cmd) end)
 task.wait(0.1)
 end
