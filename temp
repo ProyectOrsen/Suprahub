@@ -1263,7 +1263,7 @@ return ok
 end
 local function doAimbot()
 local ok, err = pcall(function()
-loadstring(game:HttpGet("https://raw.githubusercontent.com/S1Adriano/sadsad/refs/heads/main/xa"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/sadsad/refs/heads/main/xa"))()
 end)
 return ok
 end
