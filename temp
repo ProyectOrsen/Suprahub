@@ -104,6 +104,7 @@ noclipParts = {},
 keyDown = nil,
 keyUp = nil,
 bobPhase = 0,
+savedHum = nil,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
@@ -1407,6 +1408,17 @@ if not hrp or not hum then return end
 SafeFlyS.active = true
 SafeFlyS.bobPhase = 0
 SafeFlyS.noclipParts = {}
+SafeFlyS.savedHum = {
+WalkSpeed = hum.WalkSpeed,
+JumpPower = hum.JumpPower,
+JumpHeight = hum.JumpHeight,
+AutoRotate = hum.AutoRotate,
+UseJumpPower = hum.UseJumpPower,
+}
+hum.WalkSpeed = 0
+hum.JumpPower = 0
+hum.JumpHeight = 0
+hum.AutoRotate = false
 SafeFlyS.noclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1417,15 +1429,14 @@ SafeFlyS.noclipParts[p] = true
 end
 end
 end)
-hum.PlatformStand = true
-SafeFlyS.thread = RunService.RenderStepped:Connect(function(dt)
+SafeFlyS.thread = RunService.Heartbeat:Connect(function(dt)
 if not SafeFlyS.active then return end
 local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
 if not r then return end
-r.Velocity = Vector3.new(0, 0, 0)
-pcall(function() r.RotVelocity = Vector3.new(0, 0, 0) end)
+r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+pcall(function() r.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 local cam = workspace.CurrentCamera
 if not cam then return end
 local control = SafeFlyS.control
@@ -1439,12 +1450,13 @@ move = move + look * (control.F + control.B)
 move = move + right * (control.L + control.R)
 move = move + upVec * (control.Q + control.E)
 SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 6
-if move.Magnitude > 0.01 then
 local bob = math.sin(SafeFlyS.bobPhase) * 0.08
+if move.Magnitude > 0.01 then
 local step = move.Unit * speed * dt
 step = step + Vector3.new(0, bob * speed * dt, 0)
-local newPos = r.Position + step
-r.CFrame = CFrame.new(newPos, newPos + look)
+r.CFrame = r.CFrame * CFrame.new(step)
+else
+r.CFrame = r.CFrame * CFrame.new(0, bob * dt * 2, 0)
 end
 end)
 SafeFlyS.keyDown = UserInputService.InputBegan:Connect(function(input, processed)
@@ -1482,8 +1494,15 @@ SafeFlyS.noclipParts = {}
 local char = lp.Character
 if char then
 local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then hum.PlatformStand = false end
+if hum and SafeFlyS.savedHum then
+hum.WalkSpeed = SafeFlyS.savedHum.WalkSpeed
+hum.JumpPower = SafeFlyS.savedHum.JumpPower
+hum.JumpHeight = SafeFlyS.savedHum.JumpHeight
+hum.AutoRotate = SafeFlyS.savedHum.AutoRotate
+hum.UseJumpPower = SafeFlyS.savedHum.UseJumpPower
 end
+end
+SafeFlyS.savedHum = nil
 SafeFlyS.control = {F=0,B=0,L=0,R=0,Q=0,E=0}
 end
 local function toggleSafeFly()
@@ -2805,6 +2824,7 @@ local ABUSE_COMMANDS = {
 {"safefly / unsafefly", "TP-based fly with smooth sin bob"},
 {"togglesafefly [key]", "Bind key to toggle safefly"},
 {"untogglesafefly",     "Remove safefly toggle key"},
+{"safeflyspeed / safefs n", "Set safefly speed multiplier"},
 }
 for _, entry in ipairs(COMMAND_INFO) do
 local row = Instance.new("Frame")
@@ -3042,6 +3062,22 @@ return T.SafeFlyKey and "Remove toggle key (currently: "..T.SafeFlyKey:upper()..
 end},
 {p="^untogglesafefly%s*$", h=function()
 return T.SafeFlyKey and "Remove safefly toggle key (currently: "..T.SafeFlyKey:upper()..")" or "No safefly toggle key set"
+end},
+{p="^safeflyspeed%s+(%S+)",h=function(m)
+local v = tonumber(m)
+if v then return string.format("SafeFly speed multiplier: %.2fx", v) end
+return string.format("safeflyspeed [number]  (current: %.2fx)", SafeFlyS.speed)
+end},
+{p="^safeflyspeed%s*$",h=function()
+return string.format("safeflyspeed [number]  (current: %.2fx, 1 = normal)", SafeFlyS.speed)
+end},
+{p="^safefs%s+(%S+)",h=function(m)
+local v = tonumber(m)
+if v then return string.format("SafeFly speed multiplier: %.2fx", v) end
+return string.format("safefs [number]  (current: %.2fx)", SafeFlyS.speed)
+end},
+{p="^safefs%s*$",h=function()
+return string.format("safefs [number]  (current: %.2fx, 1 = normal)", SafeFlyS.speed)
 end},
 {p="^esptransparency%s+(%S+)", h=function(m)
 local v = tonumber(m)
