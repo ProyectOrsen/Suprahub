@@ -71,6 +71,7 @@ FCKey = nil, FCConn = nil,
 FlyKey = nil, FlyConn = nil,
 AuraKey = nil, AuraConn = nil,
 WalkflingKey = nil, WalkflingConn = nil,
+SafeFlyKey = nil, SafeFlyConn = nil,
 }
 local AuraS = {
 active = false,
@@ -92,6 +93,17 @@ flyThread = nil,
 BG = nil,
 BV = nil,
 flySpeed = 1,
+}
+local SafeFlyS = {
+active = false,
+speed = 1,
+control = {F=0,B=0,L=0,R=0,Q=0,E=0},
+thread = nil,
+noclipConn = nil,
+noclipParts = {},
+keyDown = nil,
+keyUp = nil,
+bobPhase = 0,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
@@ -1273,7 +1285,13 @@ return true
 end
 local function doIA()
 local ok, err = pcall(function()
-loadstring(game:HttpGet("https://raw.githubusercontent.com/S1Adriano/ninnitruco/refs/heads/main/ninnihub"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/ninnitruco/refs/heads/main/ninnihub"))()
+end)
+return ok
+end
+local function doHavoc()
+local ok, err = pcall(function()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/havo/refs/heads/main/lot"))()
 end)
 return ok
 end
@@ -1305,6 +1323,7 @@ end
 local function startFly()
 if not S.abuseMode then return end
 if FlyS.flying then return end
+if SafeFlyS.active then return end
 local char = lp.Character
 if not char then return end
 local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -1374,6 +1393,140 @@ stopNoclip()
 end
 local function setFlySpeed(speed)
 FlyS.flySpeed = speed
+end
+local BASE_SAFE_SPEED = 80
+local function startSafeFly()
+if not S.abuseMode then return end
+if SafeFlyS.active then return end
+if FlyS.flying then return end
+local char = lp.Character
+if not char then return end
+local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+local hum = char:FindFirstChildOfClass("Humanoid")
+if not hrp or not hum then return end
+SafeFlyS.active = true
+SafeFlyS.bobPhase = 0
+SafeFlyS.noclipParts = {}
+SafeFlyS.noclipConn = RunService.Stepped:Connect(function()
+local c = lp.Character
+if not c then return end
+for _, p in pairs(c:GetDescendants()) do
+if p:IsA("BasePart") and p.CanCollide then
+p.CanCollide = false
+SafeFlyS.noclipParts[p] = true
+end
+end
+end)
+hum.PlatformStand = true
+SafeFlyS.thread = RunService.RenderStepped:Connect(function(dt)
+if not SafeFlyS.active then return end
+local c = lp.Character
+if not c then return end
+local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
+if not r then return end
+r.Velocity = Vector3.new(0, 0, 0)
+pcall(function() r.RotVelocity = Vector3.new(0, 0, 0) end)
+local cam = workspace.CurrentCamera
+if not cam then return end
+local control = SafeFlyS.control
+local speed = BASE_SAFE_SPEED * SafeFlyS.speed
+local camCF = cam.CFrame
+local look = camCF.LookVector
+local right = camCF.RightVector
+local upVec = Vector3.new(0, 1, 0)
+local move = Vector3.new(0, 0, 0)
+move = move + look * (control.F + control.B)
+move = move + right * (control.L + control.R)
+move = move + upVec * (control.Q + control.E)
+SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 6
+if move.Magnitude > 0.01 then
+local bob = math.sin(SafeFlyS.bobPhase) * 0.08
+local step = move.Unit * speed * dt
+step = step + Vector3.new(0, bob * speed * dt, 0)
+local newPos = r.Position + step
+r.CFrame = CFrame.new(newPos, newPos + look)
+end
+end)
+SafeFlyS.keyDown = UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if cmdBar:IsFocused() then return end
+if input.KeyCode == Enum.KeyCode.W then SafeFlyS.control.F = 1
+elseif input.KeyCode == Enum.KeyCode.S then SafeFlyS.control.B = -1
+elseif input.KeyCode == Enum.KeyCode.A then SafeFlyS.control.L = -1
+elseif input.KeyCode == Enum.KeyCode.D then SafeFlyS.control.R = 1
+elseif input.KeyCode == Enum.KeyCode.E then SafeFlyS.control.Q = 1
+elseif input.KeyCode == Enum.KeyCode.Q then SafeFlyS.control.E = -1 end
+end)
+SafeFlyS.keyUp = UserInputService.InputEnded:Connect(function(input, processed)
+if processed then return end
+if input.KeyCode == Enum.KeyCode.W then SafeFlyS.control.F = 0
+elseif input.KeyCode == Enum.KeyCode.S then SafeFlyS.control.B = 0
+elseif input.KeyCode == Enum.KeyCode.A then SafeFlyS.control.L = 0
+elseif input.KeyCode == Enum.KeyCode.D then SafeFlyS.control.R = 0
+elseif input.KeyCode == Enum.KeyCode.E then SafeFlyS.control.Q = 0
+elseif input.KeyCode == Enum.KeyCode.Q then SafeFlyS.control.E = 0 end
+end)
+end
+local function stopSafeFly()
+SafeFlyS.active = false
+if SafeFlyS.thread then SafeFlyS.thread:Disconnect(); SafeFlyS.thread = nil end
+if SafeFlyS.keyDown then SafeFlyS.keyDown:Disconnect(); SafeFlyS.keyDown = nil end
+if SafeFlyS.keyUp then SafeFlyS.keyUp:Disconnect(); SafeFlyS.keyUp = nil end
+if SafeFlyS.noclipConn then SafeFlyS.noclipConn:Disconnect(); SafeFlyS.noclipConn = nil end
+for p, _ in pairs(SafeFlyS.noclipParts) do
+if typeof(p) == "Instance" and p:IsA("BasePart") and p.Parent then
+p.CanCollide = true
+end
+end
+SafeFlyS.noclipParts = {}
+local char = lp.Character
+if char then
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum then hum.PlatformStand = false end
+end
+SafeFlyS.control = {F=0,B=0,L=0,R=0,Q=0,E=0}
+end
+local function toggleSafeFly()
+if SafeFlyS.active then
+stopSafeFly()
+else
+startSafeFly()
+end
+end
+local function setToggleSafeFlyKey(keyName)
+if T.SafeFlyConn then T.SafeFlyConn:Disconnect(); T.SafeFlyConn = nil end
+if not keyName or keyName == "" then
+T.SafeFlyKey = nil
+return
+end
+local specialKeys = {[";"]="Semicolon",["."]="Period",[","]="Comma",["/"]="Slash",["\\"]="BackSlash"}
+local keyCode
+if specialKeys[keyName] then
+keyCode = Enum.KeyCode[specialKeys[keyName]]
+elseif #keyName == 1 then
+keyCode = Enum.KeyCode[keyName:upper()]
+else
+local ok, kc = pcall(function() return Enum.KeyCode[keyName] end)
+if ok and kc then keyCode = kc end
+end
+if not keyCode then return end
+T.SafeFlyKey = #keyName == 1 and keyName:lower() or keyName
+T.SafeFlyConn = UserInputService.InputBegan:Connect(function(input, gp)
+if gp then return end
+if cmdBar:IsFocused() then return end
+if input.KeyCode == keyCode then
+if SafeFlyS.active then
+stopSafeFly()
+if showNotify then showNotify("SafeFly: OFF", C.SUBTEXT) end
+else
+startSafeFly()
+if SafeFlyS.active and showNotify then showNotify("SafeFly: ON", C.ABUSE) end
+end
+end
+end)
+end
+local function setSafeFlySpeed(speed)
+SafeFlyS.speed = speed
 end
 local function doAntilag()
 if S.antilagActive then return end
@@ -2631,6 +2784,7 @@ local ABUSE_COMMANDS = {
 {"aimbot",             "Load aimbot script"},
 {"aimbot2",            "Load aimbot2 (coming soon)"},
 {"ia",                 "Load Ninni Hub script"},
+{"havoc",              "Load Havoc script"},
 {"vanehub",            "Load VaneHub (coming soon)"},
 {"aura",               "Start aura"},
 {"unaura / noaura",    "Stop aura"},
@@ -2648,6 +2802,9 @@ local ABUSE_COMMANDS = {
 {"togglefly [key]",    "Bind key to toggle fly"},
 {"untogglefly",        "Remove fly toggle key"},
 {"flyspeed / flyws n", "Set fly speed multiplier (default 1)"},
+{"safefly / unsafefly", "TP-based fly with smooth sin bob"},
+{"togglesafefly [key]", "Bind key to toggle safefly"},
+{"untogglesafefly",     "Remove safefly toggle key"},
 }
 for _, entry in ipairs(COMMAND_INFO) do
 local row = Instance.new("Frame")
@@ -2718,6 +2875,7 @@ if not on then
 if S.walkflingActive then stopWalkfling() end
 if AuraS.active then stopAura() end
 if FlyS.flying then stopFly() end
+if SafeFlyS.active then stopSafeFly() end
 end
 if on then
 pcall(function()
@@ -2866,6 +3024,25 @@ end},
 {p="^untoggleaura%s*$", h=function()
 return T.AuraKey and "Remove aura toggle key (currently: "..T.AuraKey:upper()..")" or "No aura toggle key set"
 end},
+{p="^safefly%s*$", h=function()
+if not S.abuseMode then return "Requires abuse mode" end
+return SafeFlyS.active and "Stop safefly" or "Start safefly (TP-based, smooth)"
+end},
+{p="^unsafefly%s*$", h=function()
+if not S.abuseMode then return "Requires abuse mode" end
+return SafeFlyS.active and "Stop safefly" or "Not safeflying"
+end},
+{p="^nosafefly%s*$", h=function()
+if not S.abuseMode then return "Requires abuse mode" end
+return SafeFlyS.active and "Stop safefly" or "Not safeflying"
+end},
+{p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle to key: " .. m:upper() end},
+{p="^togglesafefly%s*$", h=function()
+return T.SafeFlyKey and "Remove toggle key (currently: "..T.SafeFlyKey:upper()..")" or "togglesafefly [key] — bind a toggle key"
+end},
+{p="^untogglesafefly%s*$", h=function()
+return T.SafeFlyKey and "Remove safefly toggle key (currently: "..T.SafeFlyKey:upper()..")" or "No safefly toggle key set"
+end},
 {p="^esptransparency%s+(%S+)", h=function(m)
 local v = tonumber(m)
 if v then v = math.clamp(v, 0.01, 0.95); return string.format("Set ESP transparency to %.2f", v) end
@@ -2984,6 +3161,10 @@ end},
 {p="^ia%s*$", h=function()
 if not S.abuseMode then return "Requires abuse mode" end
 return "Load Ninni Hub script"
+end},
+{p="^havoc%s*$", h=function()
+if not S.abuseMode then return "Requires abuse mode" end
+return "Load Havoc script"
 end},
 {p="^vanehub%s*$", h=function()
 if not S.abuseMode then return "Requires abuse mode" end
@@ -3166,6 +3347,10 @@ elseif cmd == "toggleaurakey" then
 if arg1 then setToggleAuraKey(arg1) else setToggleAuraKey(nil) end
 elseif cmd == "untoggleaura" then
 setToggleAuraKey(nil)
+elseif cmd == "togglesafefly" then
+if arg1 then setToggleSafeFlyKey(arg1) else setToggleSafeFlyKey(nil) end
+elseif cmd == "untogglesafefly" then
+setToggleSafeFlyKey(nil)
 elseif cmd == "esptransparency" or cmd == "espt" then
 local v = tonumber(arg1)
 if v then S.espAlpha = math.clamp(v, 0.01, 0.95); applyESPTransparency() end
@@ -3255,6 +3440,9 @@ doAimbot2()
 elseif cmd == "ia" then
 if not S.abuseMode then return end
 doIA()
+elseif cmd == "havoc" then
+if not S.abuseMode then return end
+doHavoc()
 elseif cmd == "vanehub" then
 if not S.abuseMode then return end
 print("coming soon")
@@ -3307,6 +3495,27 @@ if not S.abuseMode then return end
 local v = tonumber(arg1)
 if v and v > 0 then
 setFlySpeed(v)
+end
+elseif cmd == "safefly" then
+if not S.abuseMode then return end
+if SafeFlyS.active then
+stopSafeFly()
+showNotify("SafeFly: OFF", C.SUBTEXT)
+else
+startSafeFly()
+if SafeFlyS.active then showNotify("SafeFly: ON", C.ABUSE) end
+end
+elseif cmd == "unsafefly" or cmd == "nosafefly" then
+if not S.abuseMode then return end
+if SafeFlyS.active then
+stopSafeFly()
+showNotify("SafeFly: OFF", C.SUBTEXT)
+end
+elseif cmd == "safeflyspeed" or cmd == "safefs" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v and v > 0 then
+setSafeFlySpeed(v)
 end
 elseif cmd == "playercount" or cmd == "pcount" then
 S.showPlayerCount = not S.showPlayerCount
@@ -3538,6 +3747,7 @@ end
 end)
 local function onCharacterDied()
 if FlyS.flying then stopFly() end
+if SafeFlyS.active then stopSafeFly() end
 if AuraS.active then stopAura() end
 if S.walkflingActive then stopWalkfling() end
 end
