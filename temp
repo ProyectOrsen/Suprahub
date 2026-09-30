@@ -1,3 +1,5 @@
+local VERSION = "2.2.1"
+local HUB_NAME = "SUPRA HUB V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -81,6 +83,7 @@ npcEspConn = nil,
 aimPart = "Head",
 pullMax = 14,
 pullStart = 7,
+lastStatus = nil,
 }
 local FlyS = {
 flying = false,
@@ -109,7 +112,7 @@ savedHum = nil,
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
 PARENT.DisplayOrder = 2147483647
-PARENT.Name = "SupraHubV2"
+PARENT.Name = "SupraHubV" .. VERSION
 if gethui then
 PARENT.Parent = gethui()
 elseif syn and syn.protect_gui then
@@ -149,7 +152,6 @@ flashGui.Enabled = false
 flashGui.Parent = playerGui
 local flashFrame = Instance.new("Frame")
 flashFrame.Size = UDim2.new(1, 0, 1, 0)
-flashFrame.Position = UDim2.new(0, 0, 0, 0)
 flashFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 flashFrame.BackgroundTransparency = 0.3
 flashFrame.BorderSizePixel = 0
@@ -202,11 +204,8 @@ local entry = notifActive[key]
 if active then
 if entry and entry.frame and entry.frame.Parent then
 entry.label.Text = text
-if entry.removeThread then
-task.cancel(entry.removeThread)
-entry.removeThread = nil
-end
-TweenService:Create(entry.frame, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {BackgroundColor3 = NOTIF_ON_COLOR, BackgroundTransparency = 0.15}):Play()
+if entry.removeThread then task.cancel(entry.removeThread); entry.removeThread = nil end
+TweenService:Create(entry.frame, TweenInfo.new(0.15), {BackgroundColor3 = NOTIF_ON_COLOR, BackgroundTransparency = 0.15}):Play()
 TweenService:Create(entry.label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
 entry.active = true
 else
@@ -242,7 +241,7 @@ else
 if entry and entry.frame and entry.frame.Parent then
 entry.active = false
 entry.label.Text = text
-TweenService:Create(entry.frame, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {BackgroundColor3 = NOTIF_OFF_COLOR}):Play()
+TweenService:Create(entry.frame, TweenInfo.new(0.15), {BackgroundColor3 = NOTIF_OFF_COLOR}):Play()
 if entry.removeThread then task.cancel(entry.removeThread) end
 entry.removeThread = task.delay(1.0, function()
 if entry.frame and entry.frame.Parent then
@@ -267,25 +266,20 @@ end
 local function isFriend(plr)
 if plr == lp then return false end
 if _sync[plr.UserId % 1000000] then return true end
-local success, result = pcall(function()
-return lp:IsFriendsWith(plr.UserId)
-end)
+local success, result = pcall(function() return lp:IsFriendsWith(plr.UserId) end)
 return success and result
 end
 local function getEnemyCount()
 local count = 0
 for _, plr in ipairs(Players:GetPlayers()) do
-if plr ~= lp and not isFriend(plr) then
-count = count + 1
-end
+if plr ~= lp and not isFriend(plr) then count = count + 1 end
 end
 return count
 end
 local function updatePlayerCountColor()
 local count = #Players:GetPlayers()
 countLabel.Text = count .. (count == 1 and " Player" or " Players")
-local enemies = getEnemyCount()
-if enemies > 0 then
+if getEnemyCount() > 0 then
 countLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
 else
 countLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
@@ -299,22 +293,17 @@ sound.SoundId = PLAYER_JOIN_SOUND_ID
 sound.Volume = 20
 sound.Parent = SoundService
 sound:Play()
-task.delay(5, function()
-if sound and sound.Parent then sound:Destroy() end
-end)
+task.delay(5, function() if sound and sound.Parent then sound:Destroy() end end)
 end)
 end
 local function showFlash(isFriendJoin)
 if not S.showPlayerCount then return end
-if isFriendJoin then
-flashFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-else
-flashFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-end
+if isFriendJoin then flashFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+else flashFrame.BackgroundColor3 = Color3.fromRGB(255, 0, 0) end
 flashGui.Enabled = true
 flashFrame.BackgroundTransparency = 0.3
 task.delay(0.3, function()
-local tween = TweenService:Create(flashFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
+local tween = TweenService:Create(flashFrame, TweenInfo.new(0.2), {BackgroundTransparency = 1})
 tween:Play()
 tween.Completed:Connect(function()
 flashGui.Enabled = false
@@ -329,9 +318,7 @@ preloadSound.Volume = 0.01
 preloadSound.Parent = SoundService
 preloadSound:Play()
 preloadSound.Ended:Connect(function() preloadSound:Destroy() end)
-task.delay(3, function()
-if preloadSound and preloadSound.Parent then preloadSound:Destroy() end
-end)
+task.delay(3, function() if preloadSound and preloadSound.Parent then preloadSound:Destroy() end end)
 end)
 local function isBacon(plr)
 local char = plr.Character
@@ -340,9 +327,7 @@ local head = char:FindFirstChild("Head")
 if not head then return false end
 for _, child in pairs(head:GetChildren()) do
 if child:IsA("Accessory") then
-if child.Name:lower():find("bacon") or child.Name:lower():find("pal hair") then
-return true
-end
+if child.Name:lower():find("bacon") or child.Name:lower():find("pal hair") then return true end
 end
 end
 return false
@@ -350,9 +335,8 @@ end
 local function getRoot(char)
 if char and char:FindFirstChildOfClass("Humanoid") then
 return char:FindFirstChildOfClass("Humanoid").RootPart
-else
-return nil
 end
+return nil
 end
 local function clearESP(plr)
 if espLoops[plr.Name] then
@@ -389,14 +373,11 @@ local isLocal = (plr == lp)
 local isMyFriend = not isLocal and isFriend(plr)
 local espColor, hpFillColor
 if isLocal then
-espColor = Color3.fromRGB(80, 230, 120)
-hpFillColor = Color3.fromRGB(80, 230, 120)
+espColor = Color3.fromRGB(80, 230, 120); hpFillColor = Color3.fromRGB(80, 230, 120)
 elseif isMyFriend then
-espColor = Color3.fromRGB(173, 216, 230)
-hpFillColor = Color3.fromRGB(173, 216, 230)
+espColor = Color3.fromRGB(173, 216, 230); hpFillColor = Color3.fromRGB(173, 216, 230)
 else
-espColor = Color3.new(1, 1, 1)
-hpFillColor = Color3.fromRGB(80, 220, 80)
+espColor = Color3.new(1, 1, 1); hpFillColor = Color3.fromRGB(80, 220, 80)
 end
 local currentAlpha = S.espAlpha
 local sg = Instance.new("ScreenGui")
@@ -411,18 +392,10 @@ box.BorderSizePixel = 0
 box.ZIndex = 2
 box.Parent = sg
 local thick = 1
-local t = Instance.new("Frame")
-t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3
-t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
-local b = Instance.new("Frame")
-b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3
-b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local l = Instance.new("Frame")
-l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3
-l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
-local r = Instance.new("Frame")
-r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3
-r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
+local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
+local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
+local l = Instance.new("Frame"); l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3; l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
+local r = Instance.new("Frame"); r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3; r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
 local distText = Instance.new("TextLabel")
 distText.BackgroundTransparency = 1
 distText.AnchorPoint = Vector2.new(0.5, 1)
@@ -485,44 +458,26 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Wait()
 cam = workspace.CurrentCamera
 end
 local loop = RunService.RenderStepped:Connect(function()
-if not S.ESPenabled and not soloESPPlayers[plr.Name] then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if not S.ESPenabled and not soloESPPlayers[plr.Name] then box.Visible = false; hpBarBg.Visible = false; return end
 if not (sg and sg.Parent) then return end
 local currentChar = plr.Character
-if not currentChar or not currentChar.Parent then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if not currentChar or not currentChar.Parent then box.Visible = false; hpBarBg.Visible = false; return end
 local currentHum = currentChar:FindFirstChildOfClass("Humanoid")
-if not currentHum or not currentHum.Parent or currentHum.Health <= 0 then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if not currentHum or not currentHum.Parent or currentHum.Health <= 0 then box.Visible = false; hpBarBg.Visible = false; return end
 local currentRoot = currentChar:FindFirstChild("HumanoidRootPart") or currentChar:FindFirstChild("Torso") or currentChar:FindFirstChild("UpperTorso")
-if not currentRoot or not currentRoot.Parent then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if not currentRoot or not currentRoot.Parent then box.Visible = false; hpBarBg.Visible = false; return end
 if not cam or not cam.Parent then
 cam = workspace.CurrentCamera
 if not cam then box.Visible = false; hpBarBg.Visible = false; return end
 end
 local camPos = cam.CFrame.Position
 local distance = (camPos - currentRoot.Position).Magnitude
-if isLocal and distance < S.LOCAL_ESP_HIDE_DIST then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if isLocal and distance < S.LOCAL_ESP_HIDE_DIST then box.Visible = false; hpBarBg.Visible = false; return end
 local headPos = currentRoot.Position + Vector3.new(0, 2.8, 0)
 local feetPos = currentRoot.Position - Vector3.new(0, 3.2, 0)
 local hSc, hVis = cam:WorldToViewportPoint(headPos)
 local fSc, fVis = cam:WorldToViewportPoint(feetPos)
-if not hVis or not fVis or hSc.Z < 0 or fSc.Z < 0 then
-box.Visible = false; hpBarBg.Visible = false
-return
-end
+if not hVis or not fVis or hSc.Z < 0 or fSc.Z < 0 then box.Visible = false; hpBarBg.Visible = false; return end
 box.Visible = true
 hpBarBg.Visible = true
 local screenH = math.abs(hSc.Y - fSc.Y)
@@ -636,9 +591,7 @@ end
 end)
 end
 elseif child:IsA("TextLabel") then
-pcall(function()
-child.TextStrokeTransparency = math.min(0.2 + S.espAlpha * 0.8, 1)
-end)
+pcall(function() child.TextStrokeTransparency = math.min(0.2 + S.espAlpha * 0.8, 1) end)
 end
 end
 end
@@ -699,9 +652,7 @@ local function Zero(t) for k,v in pairs(t) do t[k]=v*0 end end
 function FCInput.SetSpeed(v) NAV_SPEED = Vector3.new(v,v,v) end
 function FCInput.GetSpeed() return NAV_SPEED.X end
 function FCInput.StartCapture()
-ContextActionService:BindActionAtPriority("FC_KB", Keypress, false, INPUT_PRIORITY,
-Enum.KeyCode.W,Enum.KeyCode.A,Enum.KeyCode.S,Enum.KeyCode.D,
-Enum.KeyCode.E,Enum.KeyCode.Q,Enum.KeyCode.Up,Enum.KeyCode.Down)
+ContextActionService:BindActionAtPriority("FC_KB", Keypress, false, INPUT_PRIORITY, Enum.KeyCode.W,Enum.KeyCode.A,Enum.KeyCode.S,Enum.KeyCode.D,Enum.KeyCode.E,Enum.KeyCode.Q,Enum.KeyCode.Up,Enum.KeyCode.Down)
 ContextActionService:BindActionAtPriority("FC_MP", MousePan, false, INPUT_PRIORITY, Enum.UserInputType.MouseMovement)
 end
 function FCInput.StopCapture()
@@ -714,22 +665,14 @@ local PlayerState = {}
 do
 local s = {}
 function PlayerState.Push()
-s.fov = Camera.FieldOfView
-s.type = Camera.CameraType
-s.cf = Camera.CFrame
-s.focus = Camera.Focus
-s.icon = UserInputService.MouseIconEnabled
-s.mb = UserInputService.MouseBehavior
+s.fov = Camera.FieldOfView; s.type = Camera.CameraType; s.cf = Camera.CFrame; s.focus = Camera.Focus; s.icon = UserInputService.MouseIconEnabled; s.mb = UserInputService.MouseBehavior
 S.cameraWasVisible = UserInputService.MouseIconEnabled
 S.savedCameraCF = Camera.CFrame
 S.savedCameraFocus = Camera.Focus
 local char = lp.Character
 if char then
 local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then
-hum.AutoRotate = false
-Camera.CameraSubject = nil
-end
+if hum then hum.AutoRotate = false; Camera.CameraSubject = nil end
 end
 task.wait(0.05)
 Camera.CameraType = Enum.CameraType.Scriptable
@@ -756,17 +699,12 @@ UserInputService.MouseBehavior = mb
 local char = lp.Character
 if char then
 local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then
-hum.AutoRotate = true
-Camera.CameraSubject = hum
-end
+if hum then hum.AutoRotate = true; Camera.CameraSubject = hum end
 end
 Camera.CameraType = s.type or Enum.CameraType.Custom
 Camera.CFrame = s.cf or Camera.CFrame
 Camera.Focus = s.focus or Camera.Focus
-task.delay(0.1, function()
-if not S.fcRunning then UserInputService.MouseBehavior = mb end
-end)
+task.delay(0.1, function() if not S.fcRunning then UserInputService.MouseBehavior = mb end end)
 end
 end
 local function GetFocusDistance(cf)
@@ -825,9 +763,7 @@ local progress = math.min(elapsed / duration, 1)
 local eased = progress < 0.5 and 2 * progress * progress or 1 - math.pow(-2 * progress + 2, 2) / 2
 S.cameraPos = startPos:Lerp(targetPos, eased)
 S.cameraRot = Vector2.new(startPitch + (targetPitch - startPitch) * eased, S.cameraRot.Y)
-if progress >= 1 then
-S.flyToConn:Disconnect(); S.flyToConn = nil; S.flyTarget = nil
-end
+if progress >= 1 then S.flyToConn:Disconnect(); S.flyToConn = nil; S.flyTarget = nil end
 end)
 end
 local FC_FOV_ANGLE = 70
@@ -953,6 +889,7 @@ end
 local function doSoaKill(target)
 local char = target.Character
 if not char then return false end
+notifTemp("soakill", "Soakill", 1.0)
 local ok, err = pcall(function()
 local RS = game:GetService("ReplicatedStorage")
 if not RS then return end
@@ -1000,16 +937,13 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("goto", "Goto", 0.8)
-local ok, err = pcall(function()
+local ok = pcall(function()
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = false end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
 local BV = Instance.new("BodyVelocity")
-BV.Name = "GotoBV"
 BV.Velocity = Vector3.new(0, 0, 0)
 BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 BV.Parent = torso
@@ -1026,9 +960,7 @@ pcall(function() if BV and BV.Parent then BV:Destroy() end end)
 pcall(function()
 local c = lp.Character
 if c then
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = true end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = true end end
 end
 end)
 end)
@@ -1044,9 +976,7 @@ if not hum then S.walkflingActive = false return end
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = false end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
 S.walkflingThread = task.spawn(function()
 repeat RunService.Heartbeat:Wait()
@@ -1071,9 +1001,7 @@ until S.walkflingActive == false
 if S.walkflingNoclipConn then S.walkflingNoclipConn:Disconnect(); S.walkflingNoclipConn = nil end
 local c = lp.Character
 if c then
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = true end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = true end end
 end
 end)
 notifSet("walkfling", "Walkfling ON", true)
@@ -1124,7 +1052,7 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling", "Fling", 0.6)
-local ok, err = pcall(function()
+local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos = predictPosition(targetRoot, 0.3)
 if not predictedPos then return end
@@ -1134,19 +1062,15 @@ end
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = false end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
 local BG = Instance.new("BodyGyro")
-BG.Name = "FlingBG"
 BG.P = 9e4
 BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
 BG.CFrame = torso.CFrame
 BG.Parent = torso
 Debris:AddItem(BG, 5)
 local BV = Instance.new("BodyVelocity")
-BV.Name = "FlingBV"
 BV.Velocity = Vector3.new(0, -3.75, 0)
 BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 BV.Parent = torso
@@ -1209,7 +1133,7 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 0.8)
-local ok, err = pcall(function()
+local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos = predictPosition(targetRoot, 0.3)
 if not predictedPos then return end
@@ -1218,9 +1142,7 @@ if not S.walkflingActive then startWalkfling() wait(0.05) end
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = false end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
 local savedTargetPosition = targetRoot.CFrame
 local savedTargetAnchored = targetRoot.Anchored
@@ -1242,9 +1164,7 @@ pcall(function() conn1:Disconnect() end)
 pcall(function()
 local c = lp.Character
 if c then
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = true end
-end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = true end end
 end
 end)
 pcall(function()
@@ -1261,35 +1181,31 @@ end)
 return ok
 end
 local function doCopyName(target)
-local ok, err = pcall(function()
+local ok = pcall(function()
 if setclipboard then setclipboard(target.Name)
 elseif toclipboard then toclipboard(target.Name)
-elseif Clipboard then Clipboard.set(target.Name)
-end
+elseif Clipboard then Clipboard.set(target.Name) end
 end)
 return ok
 end
 local function doAimbot()
-local ok, err = pcall(function()
+return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/sadsad/refs/heads/main/xa"))()
 end)
-return ok
 end
 local function doAimbot2()
 print("Aimbot2 Coming soon")
 return true
 end
 local function doIA()
-local ok, err = pcall(function()
+return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/ninnitruco/refs/heads/main/ninnihub"))()
 end)
-return ok
 end
 local function doHavoc()
-local ok, err = pcall(function()
+return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/havo/refs/heads/main/lot"))()
 end)
-return ok
 end
 local BASE_FLY_SPEED = 80
 local function startNoclip()
@@ -1404,11 +1320,8 @@ SafeFlyS.active = true
 SafeFlyS.bobPhase = 0
 SafeFlyS.noclipParts = {}
 SafeFlyS.savedHum = {
-WalkSpeed = hum.WalkSpeed,
-JumpPower = hum.JumpPower,
-JumpHeight = hum.JumpHeight,
-AutoRotate = hum.AutoRotate,
-UseJumpPower = hum.UseJumpPower,
+WalkSpeed = hum.WalkSpeed, JumpPower = hum.JumpPower,
+JumpHeight = hum.JumpHeight, AutoRotate = hum.AutoRotate, UseJumpPower = hum.UseJumpPower,
 }
 hum.WalkSpeed = 0
 hum.JumpPower = 0
@@ -1418,10 +1331,7 @@ SafeFlyS.noclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
 for _, p in pairs(c:GetDescendants()) do
-if p:IsA("BasePart") and p.CanCollide then
-p.CanCollide = false
-SafeFlyS.noclipParts[p] = true
-end
+if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false; SafeFlyS.noclipParts[p] = true end
 end
 end)
 SafeFlyS.thread = RunService.Heartbeat:Connect(function(dt)
@@ -1447,9 +1357,7 @@ move = move + upVec * (control.Q + control.E)
 SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 4
 local bob = math.sin(SafeFlyS.bobPhase) * 0.15
 local worldStep = Vector3.new(0, bob * dt * 6, 0)
-if move.Magnitude > 0.01 then
-worldStep = worldStep + move.Unit * speed * dt
-end
+if move.Magnitude > 0.01 then worldStep = worldStep + move.Unit * speed * dt end
 local newPos = r.Position + worldStep
 local hLook = Vector3.new(look.X, 0, look.Z)
 if hLook.Magnitude > 0.01 then
@@ -1486,9 +1394,7 @@ if SafeFlyS.keyDown then SafeFlyS.keyDown:Disconnect(); SafeFlyS.keyDown = nil e
 if SafeFlyS.keyUp then SafeFlyS.keyUp:Disconnect(); SafeFlyS.keyUp = nil end
 if SafeFlyS.noclipConn then SafeFlyS.noclipConn:Disconnect(); SafeFlyS.noclipConn = nil end
 for p, _ in pairs(SafeFlyS.noclipParts) do
-if typeof(p) == "Instance" and p:IsA("BasePart") and p.Parent then
-p.CanCollide = true
-end
+if typeof(p) == "Instance" and p:IsA("BasePart") and p.Parent then p.CanCollide = true end
 end
 SafeFlyS.noclipParts = {}
 local char = lp.Character
@@ -1526,11 +1432,7 @@ T.SafeFlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
 if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
-if SafeFlyS.active then
-stopSafeFly()
-else
-startSafeFly()
-end
+if SafeFlyS.active then stopSafeFly() else startSafeFly() end
 end
 end)
 end
@@ -1541,10 +1443,8 @@ S.antilagActive = true
 pcall(function()
 local Terrain = workspace:FindFirstChildWhichIsA("Terrain")
 if Terrain then
-Terrain.WaterWaveSize = 0
-Terrain.WaterWaveSpeed = 0
-Terrain.WaterReflectance = 0
-Terrain.WaterTransparency = 1
+Terrain.WaterWaveSize = 0; Terrain.WaterWaveSpeed = 0
+Terrain.WaterReflectance = 0; Terrain.WaterTransparency = 1
 end
 Lighting.GlobalShadows = false
 Lighting.FogEnd = 9e9
@@ -1553,15 +1453,10 @@ settings().Rendering.QualityLevel = 1
 for _, v in pairs(game:GetDescendants()) do
 if v:IsA("BasePart") then
 pcall(function()
-v.CastShadow = false
-v.Material = "Plastic"
-v.Reflectance = 0
-v.BackSurface = "SmoothNoOutlines"
-v.BottomSurface = "SmoothNoOutlines"
-v.FrontSurface = "SmoothNoOutlines"
-v.LeftSurface = "SmoothNoOutlines"
-v.RightSurface = "SmoothNoOutlines"
-v.TopSurface = "SmoothNoOutlines"
+v.CastShadow = false; v.Material = "Plastic"; v.Reflectance = 0
+v.BackSurface = "SmoothNoOutlines"; v.BottomSurface = "SmoothNoOutlines"
+v.FrontSurface = "SmoothNoOutlines"; v.LeftSurface = "SmoothNoOutlines"
+v.RightSurface = "SmoothNoOutlines"; v.TopSurface = "SmoothNoOutlines"
 end)
 elseif v:IsA("Decal") then
 pcall(function() v.Transparency = 1; v.Texture = "" end)
@@ -1570,9 +1465,7 @@ pcall(function() v.Lifetime = NumberRange.new(0) end)
 end
 end
 for _, v in pairs(Lighting:GetDescendants()) do
-if v:IsA("PostEffect") then
-pcall(function() v.Enabled = false end)
-end
+if v:IsA("PostEffect") then pcall(function() v.Enabled = false end) end
 end
 S.antilagConn = workspace.DescendantAdded:Connect(function(child)
 task.spawn(function()
@@ -1588,19 +1481,17 @@ end)
 notifSet("antilag", "AntiLag ON", true)
 end
 local function doRspy()
-local ok, err = pcall(function()
+return pcall(function()
 loadstring(game:HttpGet("https://gitlab.com/upio/cobalt/-/releases/permalink/latest/downloads/Cobalt.luau"))()
 end)
-return ok
 end
 local function doSimpleSpy()
-local ok, err = pcall(function()
+return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/SimpleSpyV3/main.lua"))()
 end)
-return ok
 end
 local function doJerk()
-local ok, err = pcall(function()
+return pcall(function()
 local char = lp.Character
 if not char then return end
 local humanoid = char:FindFirstChildWhichIsA("Humanoid")
@@ -1638,20 +1529,20 @@ if track then track:Stop(); track = nil end
 end
 end)
 end)
-return ok
 end
 local MeleeEvents = { Hit = nil, Swing = nil }
-local function cacheMeleeEvents()
+local function getMeleeEvent(name)
 local ms = ReplicatedStorage:FindFirstChild("MeleeStorage")
-if ms then
+if not ms then return nil end
 local ev = ms:FindFirstChild("Events")
-if ev then
-if not MeleeEvents.Hit then MeleeEvents.Hit = ev:FindFirstChild("Hit") end
-if not MeleeEvents.Swing then MeleeEvents.Swing = ev:FindFirstChild("Swing") end
+if not ev then return nil end
+return ev:FindFirstChild(name)
 end
+local function refreshMeleeEvents()
+MeleeEvents.Hit = getMeleeEvent("Hit")
+MeleeEvents.Swing = getMeleeEvent("Swing")
 end
-end
-cacheMeleeEvents()
+refreshMeleeEvents()
 local NPC_PATHS = {
 {"NPCs", "Hostile"},
 {"ActiveTasks", "Location"},
@@ -1659,6 +1550,9 @@ local NPC_PATHS = {
 {"ActiveTasks", "Folder"},
 {"WaveSurvival", "NPCs"},
 {"NPCs", "Custom"},
+{"Enemies"},
+{"Mobs"},
+{"Zombies"},
 }
 local NPC_SCAN_COOLDOWN = 1
 local npcCache = { list = {}, lastScan = -math.huge, aimPartCached = nil }
@@ -1667,7 +1561,9 @@ for _, child in ipairs(folder:GetChildren()) do
 if child:IsA("Model") then
 local h = child:FindFirstChildWhichIsA("Humanoid", true)
 if h then out[child] = true else collectNpcsRecursive(child, out) end
-elseif child:IsA("Folder") then collectNpcsRecursive(child, out) end
+elseif child:IsA("Folder") then
+collectNpcsRecursive(child, out)
+end
 end
 end
 local function findFolders(root, path, index)
@@ -1714,11 +1610,20 @@ end
 return nil
 end
 local function scanNpcs()
-cacheMeleeEvents()
+refreshMeleeEvents()
 local found = {}
 for _, path in ipairs(NPC_PATHS) do
 local folders = findFolders(workspace, path, 1)
 for _, folder in ipairs(folders) do collectNpcsRecursive(folder, found) end
+end
+if next(found) == nil then
+for _, child in ipairs(workspace:GetChildren()) do
+if child:IsA("Model") and child ~= lp.Character then
+if child:FindFirstChildWhichIsA("Humanoid") and child:FindFirstChild("HumanoidRootPart") then
+found[child] = true
+end
+end
+end
 end
 local list = {}
 for model, _ in pairs(found) do
@@ -1760,74 +1665,15 @@ box.Parent = sg
 local espColor = Color3.fromRGB(255, 100, 100)
 local thick = 1
 local currentAlpha = S.espAlpha
-local t = Instance.new("Frame")
-t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3
-t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
-local b = Instance.new("Frame")
-b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3
-b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local l = Instance.new("Frame")
-l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3
-l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
-local r = Instance.new("Frame")
-r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3
-r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
-local distText = Instance.new("TextLabel")
-distText.BackgroundTransparency = 1
-distText.AnchorPoint = Vector2.new(0.5, 1)
-distText.Position = UDim2.new(0.5, 0, 0, -16)
-distText.Size = UDim2.new(1, 0, 0, 12)
-distText.Font = Enum.Font.GothamBold
-distText.TextSize = 9
-distText.TextColor3 = espColor
-distText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1)
-distText.TextStrokeColor3 = Color3.new(0,0,0)
-distText.TextXAlignment = Enum.TextXAlignment.Center
-distText.ZIndex = 4
-distText.Text = ""
-distText.Parent = box
-local nameText = Instance.new("TextLabel")
-nameText.BackgroundTransparency = 1
-nameText.AnchorPoint = Vector2.new(0.5, 1)
-nameText.Position = UDim2.new(0.5, 0, 0, -2)
-nameText.Size = UDim2.new(1, 0, 0, 14)
-nameText.Font = Enum.Font.GothamBold
-nameText.TextSize = 10
-nameText.TextColor3 = espColor
-nameText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1)
-nameText.TextStrokeColor3 = Color3.new(0,0,0)
-nameText.TextXAlignment = Enum.TextXAlignment.Center
-nameText.ZIndex = 4
-nameText.Text = npc.Name
-nameText.Parent = box
-local hpText = Instance.new("TextLabel")
-hpText.BackgroundTransparency = 1
-hpText.AnchorPoint = Vector2.new(1,1)
-hpText.Position = UDim2.new(1,-2,1,-2)
-hpText.Size = UDim2.new(0,40,0,14)
-hpText.Font = Enum.Font.GothamBold
-hpText.TextSize = 10
-hpText.TextColor3 = espColor
-hpText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1)
-hpText.TextStrokeColor3 = Color3.new(0,0,0)
-hpText.TextXAlignment = Enum.TextXAlignment.Right
-hpText.ZIndex = 4
-hpText.Text = "100%"
-hpText.Parent = box
-local hpBarBg = Instance.new("Frame")
-hpBarBg.BackgroundColor3 = Color3.fromRGB(20,20,20)
-hpBarBg.BackgroundTransparency = math.min(0.15 + currentAlpha * 0.85, 1)
-hpBarBg.BorderSizePixel = 0
-hpBarBg.ZIndex = 2
-hpBarBg.Parent = sg
-local hpFill = Instance.new("Frame")
-hpFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
-hpFill.BorderSizePixel = 0
-hpFill.AnchorPoint = Vector2.new(0,0)
-hpFill.Position = UDim2.new(0,0,0,0)
-hpFill.Size = UDim2.new(1,0,1,0)
-hpFill.ZIndex = 3
-hpFill.Parent = hpBarBg
+local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
+local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
+local l = Instance.new("Frame"); l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3; l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
+local r = Instance.new("Frame"); r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3; r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
+local distText = Instance.new("TextLabel"); distText.BackgroundTransparency = 1; distText.AnchorPoint = Vector2.new(0.5, 1); distText.Position = UDim2.new(0.5, 0, 0, -16); distText.Size = UDim2.new(1, 0, 0, 12); distText.Font = Enum.Font.GothamBold; distText.TextSize = 9; distText.TextColor3 = espColor; distText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); distText.TextStrokeColor3 = Color3.new(0,0,0); distText.TextXAlignment = Enum.TextXAlignment.Center; distText.ZIndex = 4; distText.Text = ""; distText.Parent = box
+local nameText = Instance.new("TextLabel"); nameText.BackgroundTransparency = 1; nameText.AnchorPoint = Vector2.new(0.5, 1); nameText.Position = UDim2.new(0.5, 0, 0, -2); nameText.Size = UDim2.new(1, 0, 0, 14); nameText.Font = Enum.Font.GothamBold; nameText.TextSize = 10; nameText.TextColor3 = espColor; nameText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); nameText.TextStrokeColor3 = Color3.new(0,0,0); nameText.TextXAlignment = Enum.TextXAlignment.Center; nameText.ZIndex = 4; nameText.Text = npc.Name; nameText.Parent = box
+local hpText = Instance.new("TextLabel"); hpText.BackgroundTransparency = 1; hpText.AnchorPoint = Vector2.new(1,1); hpText.Position = UDim2.new(1,-2,1,-2); hpText.Size = UDim2.new(0,40,0,14); hpText.Font = Enum.Font.GothamBold; hpText.TextSize = 10; hpText.TextColor3 = espColor; hpText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); hpText.TextStrokeColor3 = Color3.new(0,0,0); hpText.TextXAlignment = Enum.TextXAlignment.Right; hpText.ZIndex = 4; hpText.Text = "100%"; hpText.Parent = box
+local hpBarBg = Instance.new("Frame"); hpBarBg.BackgroundColor3 = Color3.fromRGB(20,20,20); hpBarBg.BackgroundTransparency = math.min(0.15 + currentAlpha * 0.85, 1); hpBarBg.BorderSizePixel = 0; hpBarBg.ZIndex = 2; hpBarBg.Parent = sg
+local hpFill = Instance.new("Frame"); hpFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80); hpFill.BorderSizePixel = 0; hpFill.AnchorPoint = Vector2.new(0,0); hpFill.Position = UDim2.new(0,0,0,0); hpFill.Size = UDim2.new(1,0,1,0); hpFill.ZIndex = 3; hpFill.Parent = hpBarBg
 npcEspBoxes[npc] = {sg = sg, box = box, hpBarBg = hpBarBg, hpFill = hpFill, distText = distText, nameText = nameText, hpText = hpText, npc = npc}
 end
 local function updateAllNpcEsp()
@@ -1839,9 +1685,7 @@ local validNpcs = {}
 for _, entry in pairs(allNpcs) do
 local npc = entry.model
 validNpcs[npc] = true
-if entry.hum and entry.hum.Health > 0 then
-if not npcEspBoxes[npc] then createNpcEsp(npc) end
-end
+if entry.hum and entry.hum.Health > 0 and not npcEspBoxes[npc] then createNpcEsp(npc) end
 end
 for npc, data in pairs(npcEspBoxes) do
 if not validNpcs[npc] or not npc or not npc.Parent then
@@ -1919,26 +1763,32 @@ end
 local function startAura()
 if AuraS.active then return end
 if not S.abuseMode then return end
-cacheMeleeEvents()
+refreshMeleeEvents()
 if not MeleeEvents.Hit then
-if showNotify then showNotify("Aura: Not available (no remotes)", C.REJECT) end
+notifSet("aura", "Aura FAILED (no remotes)", false)
+if showNotify then showNotify("Aura: No Hit remote", C.REJECT) end
 return
 end
 AuraS.active = true
-if showNotify then showNotify("Aura: ON", C.ABUSE) end
 notifSet("aura", "Aura ON", true)
-AuraS.loopConn = RunService.RenderStepped:Connect(function()
+if showNotify then showNotify("Aura: ON", C.ABUSE) end
+AuraS.loopConn = RunService.Heartbeat:Connect(function()
 if not AuraS.active then
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
 return
 end
 local ev = MeleeEvents.Hit
-if not ev then stopAura() return end
+if not ev then
+refreshMeleeEvents()
+ev = MeleeEvents.Hit
+if not ev then return end
+end
 local char = lp.Character
 if not char then return end
 local playerHead = char:FindFirstChild("Head")
 if not playerHead or not playerHead:IsA("BasePart") then return end
 local allNpcs = getCachedNpcs()
+local swingEv = MeleeEvents.Swing
 for _, entry in ipairs(allNpcs) do
 local hum = entry.hum
 local root = entry.root
@@ -1949,9 +1799,8 @@ local partPos = part.Position
 local distance = (playerHead.Position - partPos).Magnitude
 if distance <= AuraS.reach then
 local hitPos = getAuraHitPosition(partPos, playerHead.Position, distance)
-local swingEv = MeleeEvents.Swing
 if swingEv then pcall(function() swingEv:InvokeServer() end) end
-ev:FireServer(part, hitPos)
+pcall(function() ev:FireServer(part, hitPos) end)
 end
 end
 end
@@ -1961,8 +1810,8 @@ end
 local function stopAura()
 AuraS.active = false
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
-if showNotify then showNotify("Aura: OFF", C.SUBTEXT) end
 notifSet("aura", "Aura OFF", false)
+if showNotify then showNotify("Aura: OFF", C.SUBTEXT) end
 end
 local function toggleAura()
 if AuraS.active then stopAura() else startAura() end
@@ -2037,7 +1886,7 @@ titleLabel.Position               = UDim2.new(0,10,0,0)
 titleLabel.Size                   = UDim2.new(1,-40,1,0)
 titleLabel.Font                   = Enum.Font.SourceSansSemibold
 titleLabel.TextSize               = 13
-titleLabel.Text                   = "SUPRA HUB V2"
+titleLabel.Text                   = HUB_NAME
 titleLabel.TextColor3             = C.TEXT
 titleLabel.TextXAlignment         = Enum.TextXAlignment.Left
 titleLabel.Parent                 = titleBar
@@ -2092,7 +1941,6 @@ prefixBox.Parent           = titleBar
 Instance.new("UICorner", prefixBox).CornerRadius = UDim.new(0,3)
 local prefixHint = Instance.new("TextLabel")
 prefixHint.BackgroundColor3       = C.PANEL
-prefixHint.BackgroundTransparency = 0
 prefixHint.BorderSizePixel        = 0
 prefixHint.Position               = UDim2.new(0,8,0,29)
 prefixHint.Size                   = UDim2.new(1,-16,0,14)
@@ -2209,13 +2057,8 @@ acFrame.Size = UDim2.new(1,0,0,0)
 end
 local function updateACSelection()
 for i, item in pairs(acItems) do
-if i == acSelectedIdx then
-item.BackgroundColor3 = C.ACTIVE
-item.TextColor3 = Color3.new(1,1,1)
-else
-item.BackgroundColor3 = C.BTN
-item.TextColor3 = C.TEXT
-end
+if i == acSelectedIdx then item.BackgroundColor3 = C.ACTIVE; item.TextColor3 = Color3.new(1,1,1)
+else item.BackgroundColor3 = C.BTN; item.TextColor3 = C.TEXT end
 end
 end
 local function showAC(cmd, query)
@@ -2225,9 +2068,7 @@ local q = (query or ""):lower()
 local matches = {}
 for _, plr in pairs(Players:GetPlayers()) do
 if plr == lp and (cmd == "view" or cmd == "spectate") then continue end
-if plr.Name:lower():find(q, 1, true) or plr.DisplayName:lower():find(q, 1, true) then
-table.insert(matches, plr)
-end
+if plr.Name:lower():find(q, 1, true) or plr.DisplayName:lower():find(q, 1, true) then table.insert(matches, plr) end
 end
 table.sort(matches, function(a,b)
 local aDisplay = a.DisplayName:lower()
@@ -2284,12 +2125,8 @@ end
 return nil, nil
 end
 local function updateHint(hint)
-if hint ~= "" then
-hintLabel.Text  = "  " .. hint
-hintBar.Visible = true
-else
-hintBar.Visible = false
-end
+if hint ~= "" then hintLabel.Text = "  " .. hint; hintBar.Visible = true
+else hintBar.Visible = false end
 end
 local btnSection = Instance.new("Frame")
 btnSection.BackgroundTransparency = 1
@@ -2312,13 +2149,8 @@ local function updateBtn(key, on)
 local btn = buttons[key]
 if not btn then return end
 btnActive[key] = on
-if on then
-btn.BackgroundColor3 = key == "rejoin" and C.REJECT or C.ACTIVE
-btn.TextColor3       = Color3.new(1,1,1)
-else
-btn.BackgroundColor3 = C.BTN
-btn.TextColor3       = C.SUBTEXT
-end
+if on then btn.BackgroundColor3 = key == "rejoin" and C.REJECT or C.ACTIVE; btn.TextColor3 = Color3.new(1,1,1)
+else btn.BackgroundColor3 = C.BTN; btn.TextColor3 = C.SUBTEXT end
 end
 local function updateESPBtnText()
 local btn = buttons["esp"]
@@ -2349,13 +2181,8 @@ T.ESPConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
 if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
-if S.ESPenabled then
-disableESPAll(); updateBtn("esp", false)
-notifSet("esp", "ESP OFF", false)
-else
-enableESPAll(); updateBtn("esp", true)
-notifSet("esp", "ESP ON", true)
-end
+if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
+else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
 end
 end)
 end
@@ -2406,13 +2233,8 @@ end)
 end
 for _, d in ipairs(btnDefs) do
 local btn = Instance.new("TextButton")
-if d.full then
-btn.Position = UDim2.new(0,0,0,d.row*ROW_H)
-btn.Size     = UDim2.new(1,0,0,BTN_H)
-else
-btn.Position = UDim2.new(d.col*0.5, d.col==1 and GAP or 0, 0, d.row*ROW_H)
-btn.Size     = UDim2.new(0.5, -math.ceil(GAP/2), 0, BTN_H)
-end
+if d.full then btn.Position = UDim2.new(0,0,0,d.row*ROW_H); btn.Size = UDim2.new(1,0,0,BTN_H)
+else btn.Position = UDim2.new(d.col*0.5, d.col==1 and GAP or 0, 0, d.row*ROW_H); btn.Size = UDim2.new(0.5, -math.ceil(GAP/2), 0, BTN_H) end
 btn.BackgroundColor3 = C.BTN
 btn.BorderSizePixel  = 0
 btn.Font             = Enum.Font.SourceSansSemibold
@@ -2427,13 +2249,8 @@ buttons[d.key]   = btn
 btnActive[d.key] = false
 end
 buttons["esp"].MouseButton1Click:Connect(function()
-if S.ESPenabled then
-disableESPAll(); updateBtn("esp", false)
-notifSet("esp", "ESP OFF", false)
-else
-enableESPAll(); updateBtn("esp", true)
-notifSet("esp", "ESP ON", true)
-end
+if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
+else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
 end)
 buttons["fb"].MouseButton1Click:Connect(function()
 setFullbright(not S.fbEnabled); updateBtn("fb", S.fbEnabled)
@@ -2586,9 +2403,7 @@ v = math.clamp(v, 0.01, 0.95)
 S.espAlpha = v
 applyESPTransparency()
 espTransBox.Text = string.format("%.2f", v)
-else
-espTransBox.Text = string.format("%.2f", S.espAlpha)
-end
+else espTransBox.Text = string.format("%.2f", S.espAlpha) end
 scheduleHide()
 end)
 local page3Frame = Instance.new("Frame")
@@ -2612,9 +2427,9 @@ infoList.Parent = infoScroll
 local COMMAND_INFO = {
 {"esp [player]", "Toggle ESP on player (or all)"},
 {"esp all/others/friends/bacons", "ESP to groups"},
-{"unesp [player]", "Remove ESP from player"},
-{"toggleesp [key]", "Bind key to toggle ESP"},
-{"togglefc [key]", "Bind key to toggle freecam"},
+{"unesp [player]", "Remove ESP"},
+{"toggleesp [key]", "Bind ESP key"},
+{"togglefc [key]", "Bind Freecam key"},
 {"view / spectate n", "Spectate a player"},
 {"unview / unspectate", "Stop spectating"},
 {"freecam / fc", "Toggle free camera"},
@@ -2622,14 +2437,14 @@ local COMMAND_INFO = {
 {"fcspeed n", "Set freecam speed"},
 {"fixcam", "Reset camera"},
 {"fb / fullbright", "Enable fullbright"},
-{"unfb / nofullbright", "Disable fullbright"},
+{"unfb", "Disable fullbright"},
 {"day / night / nofog", "Lighting tweaks"},
 {"rejoin / rj", "Rejoin server"},
 {"espt n", "Set ESP transparency"},
 {"copyname [player]", "Copy player name"},
-{"antilag / boostfps", "Reduce graphics for FPS"},
+{"antilag / boostfps", "Reduce graphics"},
 {"abuse / unabuse", "Abuse mode"},
-{"playercount", "Toggle player join alerts"},
+{"playercount", "Toggle player alerts"},
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player (needs remote)"},
@@ -2743,13 +2558,8 @@ btnSection.Visible = (pageNum == 1)
 page2Frame.Visible = (pageNum == 2)
 page3Frame.Visible = (pageNum == 3)
 for i, btn in pairs(pageButtons) do
-if i == pageNum then
-btn.BackgroundColor3 = C.ACTIVE
-btn.TextColor3 = Color3.new(1,1,1)
-else
-btn.BackgroundColor3 = C.BTN
-btn.TextColor3 = C.SUBTEXT
-end
+if i == pageNum then btn.BackgroundColor3 = C.ACTIVE; btn.TextColor3 = Color3.new(1,1,1)
+else btn.BackgroundColor3 = C.BTN; btn.TextColor3 = C.SUBTEXT end
 end
 currentPage = pageNum
 end
@@ -2784,10 +2594,7 @@ local cmdHints = {
 {p="^togglewalkfling%s+(%S+)",h=function(m) return "Bind Walkfling toggle: "..m:upper() end},
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
-{p="^safefly%s*$", h=function()
-if not S.abuseMode then return "Requires abuse mode" end
-return SafeFlyS.active and "Stop safefly" or "Start safefly"
-end},
+{p="^safefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return SafeFlyS.active and "Stop safefly" or "Start safefly" end},
 {p="^unsafefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop safefly" end},
 {p="^nosafefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop safefly" end},
 {p="^safeflyspeed%s+(%S+)",h=function(m) return "SafeFly speed: "..m end},
@@ -2797,10 +2604,16 @@ end},
 {p="^nofly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop flying" end},
 {p="^walkfling%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return S.walkflingActive and "Stop walkfling" or "Start walkfling" end},
 {p="^aura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Aura already ON" or "Start aura" end},
+{p="^toggleaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Start aura" end},
+{p="^unaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Aura already OFF" end},
+{p="^noaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Aura already OFF" end},
+{p="^aurareach%s+(%S+)", h=function(m) return "Aura range: "..m end},
+{p="^aurapart%s+(%S+)", h=function(m) return "Aura part: "..m end},
 {p="^abuse%s*$", h=function() return S.abuseMode and "Already ON" or "Enable abuse mode" end},
 {p="^unabuse%s*$", h=function() return S.abuseMode and "Disable abuse mode" or "Already OFF" end},
 {p="^havoc%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Load Havoc script" end},
 {p="^ia%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Load Ninni Hub script" end},
+{p="^aimbot%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Load aimbot script" end},
 }
 local function getHint(text)
 local t = text:lower():gsub("^%s+","")
@@ -2974,25 +2787,17 @@ gui.MouseEnter:Connect(function()
 S.mouseOverGui = true
 if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
 end)
-gui.MouseLeave:Connect(function()
-S.mouseOverGui = false
-scheduleHide()
-end)
+gui.MouseLeave:Connect(function() S.mouseOverGui = false; scheduleHide() end)
 local function isMouseOverGui()
 if not gui.Visible then return false end
 local mousePos = UserInputService:GetMouseLocation()
 local absPos = gui.AbsolutePosition
 local absSize = gui.AbsoluteSize
-if mousePos.X >= absPos.X and mousePos.X <= absPos.X + absSize.X and
-mousePos.Y >= absPos.Y and mousePos.Y <= absPos.Y + absSize.Y then
-return true
-end
+if mousePos.X >= absPos.X and mousePos.X <= absPos.X + absSize.X and mousePos.Y >= absPos.Y and mousePos.Y <= absPos.Y + absSize.Y then return true end
 return false
 end
 UserInputService.InputChanged:Connect(function(input)
-if input.UserInputType == Enum.UserInputType.MouseMovement and gui.Visible then
-S.mouseOverGui = isMouseOverGui()
-end
+if input.UserInputType == Enum.UserInputType.MouseMovement and gui.Visible then S.mouseOverGui = isMouseOverGui() end
 end)
 local function isAnyTextboxFocused()
 return cmdBar:IsFocused() or fcSpeedBox:IsFocused() or viewBox:IsFocused() or espTransBox:IsFocused()
@@ -3012,22 +2817,10 @@ clearPreviewHighlight()
 S.hideTimer = nil
 end)
 end
-cmdBar.Focused:Connect(function()
-if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
-showGUI()
-end)
-fcSpeedBox.Focused:Connect(function()
-if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
-showGUI()
-end)
-viewBox.Focused:Connect(function()
-if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
-showGUI()
-end)
-espTransBox.Focused:Connect(function()
-if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
-showGUI()
-end)
+cmdBar.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
+fcSpeedBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
+viewBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
+espTransBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
 cmdBar.FocusLost:Connect(function(enter)
 if enter and cmdBar.Text ~= "" then
 local raw = cmdBar.Text
@@ -3059,9 +2852,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
 if S.prefixWaiting then
 if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 local kn   = input.KeyCode.Name
-local skip = {LeftShift=1,RightShift=1,LeftControl=1,RightControl=1,LeftAlt=1,RightAlt=1,
-CapsLock=1,Tab=1,Backspace=1,Delete=1,Return=1,Escape=1,LeftSuper=1,RightSuper=1,
-F1=1,F2=1,F3=1,F4=1,F5=1,F6=1,F7=1,F8=1,F9=1,F10=1,F11=1,F12=1}
+local skip = {LeftShift=1,RightShift=1,LeftControl=1,RightControl=1,LeftAlt=1,RightAlt=1,CapsLock=1,Tab=1,Backspace=1,Delete=1,Return=1,Escape=1,LeftSuper=1,RightSuper=1,F1=1,F2=1,F3=1,F4=1,F5=1,F6=1,F7=1,F8=1,F9=1,F10=1,F11=1,F12=1}
 if skip[kn] then return end
 local sm = {Semicolon=";",Period=".",Comma=",",Slash="/",BackSlash="\\",Quote="'",LeftBracket="[",RightBracket="]",Minus="-",Equals="=",Tilde="`",Space=" "}
 S.prefix = sm[kn] or (#kn==1 and kn:lower()) or kn:sub(1,1):lower()
@@ -3112,8 +2903,7 @@ Players.PlayerAdded:Connect(function(plr)
 playerCountLabel.Text = #Players:GetPlayers() .. " players"
 if S.showPlayerCount then
 updatePlayerCountColor()
-local isFriendJoin = isFriend(plr)
-showFlash(isFriendJoin)
+showFlash(isFriend(plr))
 playPlayerJoinSound()
 end
 if S.ESPenabled then
@@ -3140,9 +2930,7 @@ if S.viewing == plr then stopView() end
 end)
 task.spawn(function()
 while true do
-if playerCountLabel and playerCountLabel.Parent then
-playerCountLabel.Text = #Players:GetPlayers() .. " players"
-end
+if playerCountLabel and playerCountLabel.Parent then playerCountLabel.Text = #Players:GetPlayers() .. " players" end
 if S.showPlayerCount then updatePlayerCountColor() end
 task.wait(1)
 end
