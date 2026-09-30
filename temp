@@ -1,4 +1,4 @@
-local VERSION = "2.2.2"
+local VERSION = "2.2.4"
 local HUB_NAME = "SUPRA HUB V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
@@ -107,6 +107,15 @@ keyDown = nil,
 keyUp = nil,
 bobPhase = 0,
 savedHum = nil,
+}
+local PredictS = {
+baseTime = 0.3,
+userMultiplier = 1.0,
+velocityScale = true,
+distanceScale = true,
+gravityComp = true,
+maxTime = 1.5,
+velFactor = 55,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
@@ -949,7 +958,38 @@ end)
 end)
 return ok
 end
--- === WALKFLING (Fixed) ===
+-- === ADAPTIVE PREDICT ===
+local function predictPosition(targetRoot, overrideTime)
+if not targetRoot or not targetRoot.Parent then return nil end
+local vel = targetRoot.Velocity
+local velMag = vel.Magnitude
+if velMag < 0.5 then
+return targetRoot.Position
+end
+local t = overrideTime or PredictS.baseTime
+if PredictS.velocityScale then
+local velBonus = math.clamp(velMag / PredictS.velFactor, 0, 1.5)
+t = t * (1 + velBonus)
+end
+local myChar = lp.Character
+local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("UpperTorso"))
+if PredictS.distanceScale and myRoot then
+local dist = (targetRoot.Position - myRoot.Position).Magnitude
+if dist > 20 then
+local distBonus = math.clamp((dist - 20) / 120, 0, 1.2)
+t = t * (1 + distBonus)
+end
+end
+t = t * PredictS.userMultiplier
+t = math.min(t, PredictS.maxTime)
+local predicted = targetRoot.Position + vel * t
+if PredictS.gravityComp and vel.Y < 0 then
+local gravityDrop = 0.5 * workspace.Gravity * t * t
+predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.35, 6), 0)
+end
+return predicted
+end
+-- === WALKFLING ===
 local function killWalkfling()
 if S.walkflingThread then
 pcall(function() S.walkflingThread:Disconnect() end)
@@ -1016,9 +1056,7 @@ if S.walkflingActive then
 stopWalkfling()
 else
 local ok = startWalkfling()
-if not ok then
-notifSet("walkfling", "Walkfling FAILED", false)
-end
+if not ok then notifSet("walkfling", "Walkfling FAILED", false) end
 end
 end
 local function setToggleWalkflingKey(keyName)
@@ -1039,12 +1077,6 @@ if gp then return end
 if input.KeyCode == keyCode then toggleWalkfling() end
 end)
 end
-local function predictPosition(targetRoot, predictTime)
-if not targetRoot or not targetRoot.Parent then return nil end
-local vel = targetRoot.Velocity
-if vel.Magnitude < 1 then return targetRoot.Position end
-return targetRoot.Position + vel * predictTime
-end
 local function doFling(target)
 local char = lp.Character
 if not char then return false end
@@ -1061,7 +1093,7 @@ if not targetRoot then return false end
 notifTemp("fling", "Fling", 0.6)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos = predictPosition(targetRoot, 0.6)
+local predictedPos = predictPosition(targetRoot)
 if not predictedPos then return end
 if targetRoot and targetRoot.Parent then
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
@@ -1142,7 +1174,7 @@ if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 0.8)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos = predictPosition(targetRoot, 0.45)
+local predictedPos = predictPosition(targetRoot)
 if not predictedPos then return end
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() wait(0.05) end
@@ -1315,7 +1347,6 @@ stopNoclip()
 notifSet("fly", "Fly OFF", false)
 end
 local function setFlySpeed(speed) FlyS.flySpeed = speed end
--- === SAFEFLY (Fixed - velocity based) ===
 local BASE_SAFE_SPEED = 80
 local function startSafeFly()
 if not S.abuseMode then return false end
@@ -1843,9 +1874,7 @@ if AuraS.active then
 stopAura()
 else
 local ok = startAura()
-if not ok then
-notifSet("aura", "Aura FAILED", false)
-end
+if not ok then notifSet("aura", "Aura FAILED", false) end
 end
 end
 local function setAuraReach(n) AuraS.reach = math.clamp(tonumber(n) or 21, 1, 30) end
@@ -1882,7 +1911,6 @@ if gp then return end
 if input.KeyCode == keyCode then toggleAura() end
 end)
 end
--- === UI ===
 local function makeLine(parent, pos, size)
 local f = Instance.new("Frame")
 f.BackgroundColor3 = C.BORDER
@@ -2480,11 +2508,18 @@ local COMMAND_INFO = {
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling with predict"},
+{"fling [player]", "Fling with adaptive predict"},
 {"fling2 [player]", "Fling walkfling + predict"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
+{"predict n", "Base predict time (default 0.3)"},
+{"predictmulti n", "User predict multiplier (default 1.0)"},
+{"predictvel", "Toggle velocity-based predict"},
+{"predictscale", "Toggle distance-based predict"},
+{"predictgravity", "Toggle gravity compensation"},
+{"predictmax n", "Max predict cap (default 1.5)"},
+{"predictinfo", "Show current predict settings"},
 {"aimbot", "Load aimbot"},
 {"ia", "Load Ninni Hub"},
 {"havoc", "Load Havoc"},
@@ -2626,6 +2661,17 @@ local cmdHints = {
 {p="^togglewalkfling%s+(%S+)",h=function(m) return "Bind Walkfling toggle: "..m:upper() end},
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
+{p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
+{p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
+{p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
+{p="^predictmulti%s*$",h=function() return string.format("predictmulti [0.1-3.0]  (current: %.2f)", PredictS.userMultiplier) end},
+{p="^predictvel%s*$",h=function() return PredictS.velocityScale and "Disable velocity scale" or "Enable velocity scale" end},
+{p="^predictscale%s*$",h=function() return PredictS.distanceScale and "Disable distance scale" or "Enable distance scale" end},
+{p="^predictgravity%s*$",h=function() return PredictS.gravityComp and "Disable gravity comp" or "Enable gravity comp" end},
+{p="^predictgrav%s*$",h=function() return PredictS.gravityComp and "Disable gravity comp" or "Enable gravity comp" end},
+{p="^predictmax%s+(%S+)",h=function(m) return "Predict max: "..m.."s" end},
+{p="^predictmax%s*$",h=function() return string.format("predictmax [0.1-3.0]  (current: %.2fs)", PredictS.maxTime) end},
+{p="^predictinfo%s*$",h=function() return "Show predict settings" end},
 {p="^safefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return SafeFlyS.active and "Stop safefly" or "Start safefly" end},
 {p="^unsafefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop safefly" end},
 {p="^nosafefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop safefly" end},
@@ -2706,6 +2752,47 @@ elseif cmd == "untoggleaura" then setToggleAuraKey(nil)
 elseif cmd == "togglesafefly" then
 if arg1 then setToggleSafeFlyKey(arg1) else setToggleSafeFlyKey(nil) end
 elseif cmd == "untogglesafefly" then setToggleSafeFlyKey(nil)
+elseif cmd == "predict" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.baseTime = math.clamp(v, 0.05, 2.0)
+notifSet("predict", string.format("Predict base: %.2fs", PredictS.baseTime), true)
+end
+elseif cmd == "predictmulti" or cmd == "predictmult" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.userMultiplier = math.clamp(v, 0.1, 3.0)
+notifSet("predictmulti", string.format("Predict multi: %.2fx", PredictS.userMultiplier), true)
+end
+elseif cmd == "predictvel" or cmd == "predictvelocity" then
+if not S.abuseMode then return end
+PredictS.velocityScale = not PredictS.velocityScale
+notifSet("predictvel", PredictS.velocityScale and "PredictVel ON" or "PredictVel OFF", PredictS.velocityScale)
+elseif cmd == "predictscale" then
+if not S.abuseMode then return end
+PredictS.distanceScale = not PredictS.distanceScale
+notifSet("predictscale", PredictS.distanceScale and "PredictScale ON" or "PredictScale OFF", PredictS.distanceScale)
+elseif cmd == "predictgravity" or cmd == "predictgrav" then
+if not S.abuseMode then return end
+PredictS.gravityComp = not PredictS.gravityComp
+notifSet("predictgravity", PredictS.gravityComp and "PredictGravity ON" or "PredictGravity OFF", PredictS.gravityComp)
+elseif cmd == "predictmax" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.maxTime = math.clamp(v, 0.1, 3.0)
+notifSet("predictmax", string.format("PredictMax: %.2fs", PredictS.maxTime), true)
+end
+elseif cmd == "predictinfo" then
+notifSet("predictinfo", string.format("P:%.2f x%.2f %s%s%s max%.2f",
+PredictS.baseTime, PredictS.userMultiplier,
+PredictS.velocityScale and "V" or "-",
+PredictS.distanceScale and "D" or "-",
+PredictS.gravityComp and "G" or "-",
+PredictS.maxTime), true)
+task.delay(3, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
 elseif cmd == "esptransparency" or cmd == "espt" then
 local v = tonumber(arg1)
 if v then S.espAlpha = math.clamp(v, 0.01, 0.95); applyESPTransparency() end
