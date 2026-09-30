@@ -1142,7 +1142,7 @@ if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 0.8)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos = predictPosition(targetRoot, 0.3)
+local predictedPos = predictPosition(targetRoot, 0.45)
 if not predictedPos then return end
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() wait(0.05) end
