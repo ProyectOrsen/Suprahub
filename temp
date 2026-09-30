@@ -1061,7 +1061,7 @@ if not targetRoot then return false end
 notifTemp("fling", "Fling", 0.6)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos = predictPosition(targetRoot, 0.3)
+local predictedPos = predictPosition(targetRoot, 0.6)
 if not predictedPos then return end
 if targetRoot and targetRoot.Parent then
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
