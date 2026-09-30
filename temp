@@ -1,4 +1,4 @@
-local VERSION = "2.2.1"
+local VERSION = "2.2.2"
 local HUB_NAME = "SUPRA HUB V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
@@ -949,42 +949,57 @@ end)
 end)
 return ok
 end
+-- === WALKFLING (Fixed) ===
+local function killWalkfling()
+if S.walkflingThread then
+pcall(function() S.walkflingThread:Disconnect() end)
+S.walkflingThread = nil
+end
+if S.walkflingNoclipConn then
+pcall(function() S.walkflingNoclipConn:Disconnect() end)
+S.walkflingNoclipConn = nil
+end
+local c = lp.Character
+if c then
+for _, v in pairs(c:GetDescendants()) do
+if v:IsA("BasePart") then pcall(function() v.CanCollide = true end) end
+end
+end
+end
 local function startWalkfling()
 if S.walkflingActive then return true end
 local char = lp.Character
 if not char then return false end
 local hum = char:FindFirstChildWhichIsA("Humanoid")
 if not hum then return false end
-local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-if not root then return false end
+local rootCheck = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+if not rootCheck then return false end
+killWalkfling()
 S.walkflingActive = true
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
-end)
-S.walkflingThread = task.spawn(function()
-while S.walkflingActive do
-RunService.Heartbeat:Wait()
-local character = lp.Character
-if not character then break end
-local r = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-if not r then break end
-local vel = r.Velocity
-r.Velocity = vel * 20000 + Vector3.new(0, 20000, 0)
-RunService.RenderStepped:Wait()
-if character and character.Parent and r and r.Parent then r.Velocity = vel end
-RunService.Stepped:Wait()
-if character and character.Parent and r and r.Parent then
-r.Velocity = vel + Vector3.new(0, 0.1, 0)
-end
-end
-if S.walkflingNoclipConn then S.walkflingNoclipConn:Disconnect(); S.walkflingNoclipConn = nil end
-local c = lp.Character
-if c then
 for _, v in pairs(c:GetDescendants()) do
-if v:IsA("BasePart") then v.CanCollide = true end
+if v:IsA("BasePart") and v.CanCollide then pcall(function() v.CanCollide = false end) end
 end
+end)
+local movel = 0.1
+S.walkflingThread = RunService.Heartbeat:Connect(function()
+if not S.walkflingActive then return end
+local c = lp.Character
+if not c then return end
+local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
+if not r then return end
+local vel = r.Velocity
+pcall(function() r.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
+RunService.RenderStepped:Wait()
+if c and c.Parent and r and r.Parent then
+pcall(function() r.Velocity = vel end)
+end
+RunService.Stepped:Wait()
+if c and c.Parent and r and r.Parent then
+pcall(function() r.Velocity = vel + Vector3.new(0, movel, 0) end)
+movel = movel * -1
 end
 end)
 notifSet("walkfling", "Walkfling ON", true)
@@ -993,14 +1008,7 @@ end
 local function stopWalkfling()
 if not S.walkflingActive then return end
 S.walkflingActive = false
-if S.walkflingThread then task.cancel(S.walkflingThread); S.walkflingThread = nil end
-if S.walkflingNoclipConn then S.walkflingNoclipConn:Disconnect(); S.walkflingNoclipConn = nil end
-local c = lp.Character
-if c then
-for _, v in pairs(c:GetDescendants()) do
-if v:IsA("BasePart") then v.CanCollide = true end
-end
-end
+killWalkfling()
 notifSet("walkfling", "Walkfling OFF", false)
 end
 local function toggleWalkfling()
@@ -1028,7 +1036,6 @@ if not keyCode then return end
 T.WalkflingKey = #keyName == 1 and keyName:lower() or keyName
 T.WalkflingConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then toggleWalkfling() end
 end)
 end
@@ -1308,6 +1315,7 @@ stopNoclip()
 notifSet("fly", "Fly OFF", false)
 end
 local function setFlySpeed(speed) FlyS.flySpeed = speed end
+-- === SAFEFLY (Fixed - velocity based) ===
 local BASE_SAFE_SPEED = 80
 local function startSafeFly()
 if not S.abuseMode then return false end
@@ -1333,7 +1341,10 @@ SafeFlyS.noclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
 for _, p in pairs(c:GetDescendants()) do
-if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false; SafeFlyS.noclipParts[p] = true end
+if p:IsA("BasePart") and p.CanCollide then
+pcall(function() p.CanCollide = false end)
+SafeFlyS.noclipParts[p] = true
+end
 end
 end)
 SafeFlyS.thread = RunService.Heartbeat:Connect(function(dt)
@@ -1342,8 +1353,6 @@ local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
 if not r then return end
-r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-pcall(function() r.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 local cam = workspace.CurrentCamera
 if not cam then return end
 local control = SafeFlyS.control
@@ -1356,21 +1365,20 @@ local move = Vector3.new(0, 0, 0)
 move = move + look * (control.F + control.B)
 move = move + right * (control.L + control.R)
 move = move + upVec * (control.Q + control.E)
-SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 4
-local bob = math.sin(SafeFlyS.bobPhase) * 0.15
-local worldStep = Vector3.new(0, bob * dt * 6, 0)
-if move.Magnitude > 0.01 then worldStep = worldStep + move.Unit * speed * dt end
-local newPos = r.Position + worldStep
-local hLook = Vector3.new(look.X, 0, look.Z)
-if hLook.Magnitude > 0.01 then
-r.CFrame = CFrame.new(newPos, newPos + hLook)
-else
-r.CFrame = CFrame.new(newPos) * (r.CFrame - r.CFrame.Position)
+SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 3
+local bob = math.sin(SafeFlyS.bobPhase) * 2.5
+local desiredVel = Vector3.new(0, bob, 0)
+if move.Magnitude > 0.01 then
+desiredVel = desiredVel + move.Unit * speed
 end
+desiredVel = desiredVel + Vector3.new(0, workspace.Gravity * dt, 0)
+pcall(function()
+r.AssemblyLinearVelocity = desiredVel
+r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end)
 end)
 SafeFlyS.keyDown = UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == Enum.KeyCode.W then SafeFlyS.control.F = 1
 elseif input.KeyCode == Enum.KeyCode.S then SafeFlyS.control.B = -1
 elseif input.KeyCode == Enum.KeyCode.A then SafeFlyS.control.L = -1
@@ -1438,7 +1446,6 @@ if not keyCode then return end
 T.SafeFlyKey = #keyName == 1 and keyName:lower() or keyName
 T.SafeFlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then toggleSafeFly() end
 end)
 end
@@ -1785,12 +1792,10 @@ if not S.abuseMode then return false end
 refreshMeleeEvents()
 if not MeleeEvents.Hit then
 notifSet("aura", "Aura FAILED (no remotes)", false)
-if showNotify then showNotify("Aura: No Hit remote", C.REJECT) end
 return false
 end
 AuraS.active = true
 notifSet("aura", "Aura ON", true)
-if showNotify then showNotify("Aura: ON", C.ABUSE) end
 AuraS.loopConn = RunService.Heartbeat:Connect(function()
 if not AuraS.active then
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
@@ -1832,14 +1837,15 @@ if not AuraS.active then return end
 AuraS.active = false
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
 notifSet("aura", "Aura OFF", false)
-if showNotify then showNotify("Aura: OFF", C.SUBTEXT) end
 end
 local function toggleAura()
 if AuraS.active then
 stopAura()
 else
 local ok = startAura()
-if not ok then notifSet("aura", "Aura FAILED", false) end
+if not ok then
+notifSet("aura", "Aura FAILED", false)
+end
 end
 end
 local function setAuraReach(n) AuraS.reach = math.clamp(tonumber(n) or 21, 1, 30) end
@@ -1873,10 +1879,10 @@ if not keyCode then return end
 T.AuraKey = #keyName == 1 and keyName:lower() or keyName
 T.AuraConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then toggleAura() end
 end)
 end
+-- === UI ===
 local function makeLine(parent, pos, size)
 local f = Instance.new("Frame")
 f.BackgroundColor3 = C.BORDER
@@ -2205,7 +2211,6 @@ T.ESPKey = #keyName == 1 and keyName:lower() or keyName
 updateESPBtnText()
 T.ESPConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
 if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
 else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
@@ -2228,7 +2233,6 @@ T.FCKey = #keyName == 1 and keyName:lower() or keyName
 updateFCBtnText()
 T.FCConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
 if S.fcRunning then stopFreecam(); updateBtn("fc", false)
 else startFreecam(); updateBtn("fc", S.fcRunning) end
@@ -2251,7 +2255,6 @@ T.FlyKey = #keyName == 1 and keyName:lower() or keyName
 updateFlyBtnText()
 T.FlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
 if FlyS.flying then stopFly() else
 local ok = startFly()
@@ -2496,7 +2499,7 @@ local ABUSE_COMMANDS = {
 {"fly / unfly", "Toggle fly"},
 {"togglefly [key]", "Bind fly toggle"},
 {"flyspeed n", "Set fly speed"},
-{"safefly / unsafefly", "Smooth TP fly"},
+{"safefly / unsafefly", "Smooth velocity fly"},
 {"togglesafefly [key]", "Bind safefly toggle"},
 {"safeflyspeed n", "Set safefly speed"},
 }
