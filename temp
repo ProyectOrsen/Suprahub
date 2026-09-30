@@ -1,4 +1,4 @@
-local VERSION = "2.2.5"
+local VERSION = "2.2.7"
 local HUB_NAME = "SUPRA HUB V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
@@ -109,17 +109,21 @@ bobPhase = 0,
 savedHum = nil,
 }
 local PredictS = {
-baseTime = 0.35,
-userMultiplier = 1.0,
+baseTime = 0.5,
+userMultiplier = 1.2,
 velocityScale = true,
 distanceScale = true,
 gravityComp = true,
-maxTime = 2.0,
-velFactor = 45,
+maxTime = 1.5,
+velFactor = 32,
 holdThreshold = 50,
-holdTimeFar = 1.5,
-holdTimeNear = 0.5,
+holdTimeFar = 0.7,
+holdTimeNear = 0.3,
+maxHoldTime = 1.0,
 matchRotation = true,
+frontOffset = 2.5,
+heightOffset = 3.0,
+lockLookVector = true,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
@@ -967,11 +971,12 @@ if not targetRoot or not targetRoot.Parent then return nil, nil end
 local vel = targetRoot.Velocity
 local velMag = vel.Magnitude
 local t = overrideTime or PredictS.baseTime
+local targetCF = targetRoot.CFrame
 if velMag < 0.5 then
-return targetRoot.Position, targetRoot.CFrame
+return targetRoot.Position, targetCF
 end
 if PredictS.velocityScale then
-local velBonus = math.clamp(velMag / PredictS.velFactor, 0, 1.5)
+local velBonus = math.clamp(velMag / PredictS.velFactor, 0, 1.8)
 t = t * (1 + velBonus)
 end
 local myChar = lp.Character
@@ -980,7 +985,7 @@ local dist = 0
 if PredictS.distanceScale and myRoot then
 dist = (targetRoot.Position - myRoot.Position).Magnitude
 if dist > 20 then
-local distBonus = math.clamp((dist - 20) / 120, 0, 1.2)
+local distBonus = math.clamp((dist - 20) / 100, 0, 1.5)
 t = t * (1 + distBonus)
 end
 end
@@ -989,9 +994,9 @@ t = math.min(t, PredictS.maxTime)
 local predicted = targetRoot.Position + vel * t
 if PredictS.gravityComp and vel.Y < 0 then
 local gravityDrop = 0.5 * workspace.Gravity * t * t
-predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.35, 6), 0)
+predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.4, 8), 0)
 end
-return predicted, targetRoot.CFrame, dist
+return predicted, targetCF, dist
 end
 -- === WALKFLING ===
 local function killWalkfling()
@@ -1092,19 +1097,29 @@ local hum = char:FindFirstChildOfClass("Humanoid")
 if not hum then return false end
 local targetChar = target.Character
 if not targetChar then return false end
-local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("UpperTorso")
 if not targetRoot then return false end
-notifTemp("fling", "Fling", 1.0)
+notifTemp("fling", "Fling", 1.2)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos, targetCF = predictPosition(targetRoot)
+local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
-local targetRot = targetCF and targetCF - targetCF.Position or nil
-if targetRoot and targetRoot.Parent then
-if PredictS.matchRotation and targetRot then
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
+local targetLook = targetCF.LookVector
+local targetRot = targetCF - targetCF.Position
+local finalPos, finalRot
+if PredictS.lockLookVector and PredictS.matchRotation then
+local frontPos = predictedPos + targetLook * PredictS.frontOffset
+finalPos = frontPos + Vector3.new(0, PredictS.heightOffset, 0)
+finalRot = targetRot
 else
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
+finalPos = predictedPos + Vector3.new(0, PredictS.heightOffset, 0)
+finalRot = PredictS.matchRotation and targetRot or nil
+end
+if targetRoot and targetRoot.Parent then
+if finalRot then
+pcall(function() root.CFrame = CFrame.new(finalPos) * finalRot end)
+else
+pcall(function() root.CFrame = CFrame.new(finalPos) end)
 end
 end
 local conn1 = RunService.Stepped:Connect(function()
@@ -1117,12 +1132,12 @@ BG.P = 9e4
 BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
 BG.CFrame = torso.CFrame
 BG.Parent = torso
-Debris:AddItem(BG, 5)
+Debris:AddItem(BG, 6)
 local BV = Instance.new("BodyVelocity")
 BV.Velocity = Vector3.new(0, -3.75, 0)
 BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 BV.Parent = torso
-Debris:AddItem(BV, 5)
+Debris:AddItem(BV, 6)
 local conn2 = RunService.Heartbeat:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1132,35 +1147,36 @@ v.Velocity = Vector3.new(0, -9e9, 0)
 end
 end
 end)
-local holdConn
-holdConn = RunService.Heartbeat:Connect(function()
+local lockConn
+lockConn = RunService.Heartbeat:Connect(function()
 local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart")
 if not r then return end
-local vel = r.Velocity
-r.Velocity = vel * -math.huge + Vector3.new(-math.huge, -math.huge, -math.huge)
-RunService.RenderStepped:Wait()
-if c and c.Parent and r and r.Parent then r.Velocity = vel end
-RunService.Stepped:Wait()
-if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
+local tChar = target.Character
+if not tChar then return end
+local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
+if not tRoot then return end
+local tLook = tRoot.CFrame.LookVector
+local lockPos = tRoot.Position + tLook * PredictS.frontOffset + Vector3.new(0, PredictS.heightOffset, 0)
+if PredictS.matchRotation then
+local lockRot = tRoot.CFrame - tRoot.CFrame.Position
+r.CFrame = CFrame.new(lockPos) * lockRot
+else
+r.CFrame = CFrame.new(lockPos, lockPos + tLook)
+end
+r.Velocity = Vector3.new(0, -1, 0)
 end)
 if targetRoot and targetRoot.Parent then
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
+pcall(function() root.CFrame = CFrame.new(finalPos + Vector3.new(0, 5.9, 0)) * finalRot end)
 wait(0.1)
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
+pcall(function() root.CFrame = CFrame.new(finalPos) * finalRot end)
 wait(0.1)
-end
-local dist = 0
-if PredictS.distanceScale then
-local myRoot = char:FindFirstChild("HumanoidRootPart")
-if myRoot and targetRoot and targetRoot.Parent then
-dist = (targetRoot.Position - myRoot.Position).Magnitude
-end
 end
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+holdTime = math.clamp(holdTime, 0.1, PredictS.maxHoldTime)
 wait(holdTime)
-pcall(function() if holdConn then holdConn:Disconnect() end end)
+pcall(function() if lockConn then lockConn:Disconnect() end end)
 pcall(function() conn1:Disconnect() end)
 pcall(function() conn2:Disconnect() end)
 pcall(function() if BG and BG.Parent then BG:Destroy() end end)
@@ -1186,14 +1202,17 @@ local hum = char:FindFirstChildOfClass("Humanoid")
 if not hum then return false end
 local targetChar = target.Character
 if not targetChar then return false end
-local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("UpperTorso")
 if not targetRoot then return false end
-notifTemp("fling2", "Fling2", 1.2)
+notifTemp("fling2", "Fling2", 1.5)
 local ok = pcall(function()
 local savedCF = root.CFrame
-local predictedPos, targetCF = predictPosition(targetRoot)
+local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
-local targetRot = targetCF and targetCF - targetCF.Position or nil
+local targetLook = targetCF.LookVector
+local targetRot = targetCF - targetCF.Position
+local finalPos = predictedPos + (PredictS.lockLookVector and targetLook * PredictS.frontOffset or Vector3.new(0,0,0)) + Vector3.new(0, PredictS.heightOffset, 0)
+local finalRot = PredictS.matchRotation and targetRot or nil
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() wait(0.05) end
 local conn1 = RunService.Stepped:Connect(function()
@@ -1212,20 +1231,35 @@ RunService.RenderStepped:Wait()
 if char and char.Parent and root and root.Parent then root.Velocity = vel end
 RunService.Stepped:Wait()
 if char and char.Parent and root and root.Parent then root.Velocity = vel + Vector3.new(0, movel, 0) end
-if PredictS.matchRotation and targetRot then
-root.CFrame = CFrame.new(predictedPos) * targetRot
+if finalRot then
+root.CFrame = CFrame.new(finalPos) * finalRot
 else
-root.CFrame = CFrame.new(predictedPos)
+root.CFrame = CFrame.new(finalPos, finalPos + targetLook)
 end
-local dist = 0
-if PredictS.distanceScale then
-local myRoot = char:FindFirstChild("HumanoidRootPart")
-if myRoot and targetRoot and targetRoot.Parent then
-dist = (targetRoot.Position - myRoot.Position).Magnitude
+local lockConn
+lockConn = RunService.Heartbeat:Connect(function()
+local c = lp.Character
+if not c then return end
+local r = c:FindFirstChild("HumanoidRootPart")
+if not r then return end
+local tChar = target.Character
+if not tChar then return end
+local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Torso") or tChar:FindFirstChild("UpperTorso")
+if not tRoot then return end
+local tLook = tRoot.CFrame.LookVector
+local lockPos = tRoot.Position + tLook * PredictS.frontOffset + Vector3.new(0, PredictS.heightOffset, 0)
+if PredictS.matchRotation then
+local lockRot = tRoot.CFrame - tRoot.CFrame.Position
+r.CFrame = CFrame.new(lockPos) * lockRot
+else
+r.CFrame = CFrame.new(lockPos, lockPos + tLook)
 end
-end
+r.Velocity = Vector3.new(0, -1, 0)
+end)
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+holdTime = math.clamp(holdTime, 0.1, PredictS.maxHoldTime)
 wait(holdTime)
+pcall(function() if lockConn then lockConn:Disconnect() end end)
 targetRoot.Anchored = savedTargetAnchored
 targetRoot.CFrame = savedTargetPosition
 wait(0.1)
@@ -2538,20 +2572,24 @@ local COMMAND_INFO = {
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling with adaptive predict + hold"},
+{"fling [player]", "Fling adaptive predict + lock"},
 {"fling2 [player]", "Fling walkfling + adaptive predict"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
-{"predict n", "Base predict time (0.35)"},
-{"predictmulti n", "User predict multiplier (1.0)"},
+{"predict n", "Base predict time (0.5)"},
+{"predictmulti n", "User multiplier (1.2)"},
 {"predictvel", "Toggle velocity-based predict"},
 {"predictscale", "Toggle distance-based predict"},
 {"predictgravity", "Toggle gravity compensation"},
-{"predictmax n", "Max predict cap (2.0)"},
-{"predicthold n", "Hold threshold in studs (50)"},
-{"predictholdfar n", "Hold time when far (1.5s)"},
-{"predictholdnear n", "Hold time when near (0.5s)"},
+{"predictmax n", "Max predict cap (1.5)"},
+{"predictfront n", "Front offset (2.5)"},
+{"predictheight n", "Height offset (3.0)"},
+{"predictlock", "Toggle LookVector lock"},
+{"predicthold n", "Hold threshold (50 studs)"},
+{"predictholdfar n", "Hold far time (0.7s)"},
+{"predictholdnear n", "Hold near time (0.3s)"},
+{"predictholdmax n", "Max hold cap (1.0s)"},
 {"predictrot", "Toggle rotation matching"},
 {"predictinfo", "Show predict settings"},
 {"aimbot", "Load aimbot"},
@@ -2705,12 +2743,24 @@ local cmdHints = {
 {p="^predictgrav%s*$",h=function() return PredictS.gravityComp and "Disable gravity comp" or "Enable gravity comp" end},
 {p="^predictmax%s+(%S+)",h=function(m) return "Predict max: "..m.."s" end},
 {p="^predictmax%s*$",h=function() return string.format("predictmax [0.1-3.0]  (current: %.2fs)", PredictS.maxTime) end},
+{p="^predictfront%s+(%S+)",h=function(m) return "Front offset: "..m.." studs" end},
+{p="^predictfront%s*$",h=function() return string.format("predictfront [-10 to 15]  (current: %.1f)", PredictS.frontOffset) end},
+{p="^predictoffset%s+(%S+)",h=function(m) return "Front offset: "..m.." studs" end},
+{p="^predictoffset%s*$",h=function() return string.format("predictoffset [-10 to 15]  (current: %.1f)", PredictS.frontOffset) end},
+{p="^predictheight%s+(%S+)",h=function(m) return "Height offset: "..m end},
+{p="^predictheight%s*$",h=function() return string.format("predictheight [-5 to 15]  (current: %.1f)", PredictS.heightOffset) end},
+{p="^predicty%s+(%S+)",h=function(m) return "Height offset: "..m end},
+{p="^predicty%s*$",h=function() return string.format("predicty [-5 to 15]  (current: %.1f)", PredictS.heightOffset) end},
+{p="^predictlock%s*$",h=function() return PredictS.lockLookVector and "Disable LookVector lock" or "Enable LookVector lock" end},
+{p="^lockvector%s*$",h=function() return PredictS.lockLookVector and "Disable LookVector lock" or "Enable LookVector lock" end},
 {p="^predicthold%s+(%S+)",h=function(m) return "Hold threshold: "..m.." studs" end},
 {p="^predicthold%s*$",h=function() return string.format("predicthold [10-200]  (current: %d studs)", PredictS.holdThreshold) end},
 {p="^predictholdfar%s+(%S+)",h=function(m) return "Hold far time: "..m.."s" end},
 {p="^predictholdfar%s*$",h=function() return string.format("predictholdfar [0.1-5]  (current: %.2fs)", PredictS.holdTimeFar) end},
 {p="^predictholdnear%s+(%S+)",h=function(m) return "Hold near time: "..m.."s" end},
 {p="^predictholdnear%s*$",h=function() return string.format("predictholdnear [0.1-5]  (current: %.2fs)", PredictS.holdTimeNear) end},
+{p="^predictholdmax%s+(%S+)",h=function(m) return "Max hold time: "..m.."s" end},
+{p="^predictholdmax%s*$",h=function() return string.format("predictholdmax [0.1-1.0]  (current: %.2fs)", PredictS.maxHoldTime) end},
 {p="^predictrot%s*$",h=function() return PredictS.matchRotation and "Disable rotation match" or "Enable rotation match" end},
 {p="^predictinfo%s*$",h=function() return "Show predict settings" end},
 {p="^safefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return SafeFlyS.active and "Stop safefly" or "Start safefly" end},
@@ -2826,6 +2876,24 @@ if v then
 PredictS.maxTime = math.clamp(v, 0.1, 3.0)
 notifSet("predictmax", string.format("PredictMax: %.2fs", PredictS.maxTime), true)
 end
+elseif cmd == "predictfront" or cmd == "predictoffset" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.frontOffset = math.clamp(v, -10, 15)
+notifSet("predictfront", string.format("FrontOffset: %.1f", PredictS.frontOffset), true)
+end
+elseif cmd == "predictheight" or cmd == "predicty" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.heightOffset = math.clamp(v, -5, 15)
+notifSet("predictheight", string.format("HeightOffset: %.1f", PredictS.heightOffset), true)
+end
+elseif cmd == "predictlock" or cmd == "lockvector" then
+if not S.abuseMode then return end
+PredictS.lockLookVector = not PredictS.lockLookVector
+notifSet("predictlock", PredictS.lockLookVector and "LockLookVec ON" or "LockLookVec OFF", PredictS.lockLookVector)
 elseif cmd == "predicthold" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
@@ -2847,20 +2915,28 @@ if v then
 PredictS.holdTimeNear = math.clamp(v, 0.1, 5.0)
 notifSet("predictholdnear", string.format("HoldNear: %.2fs", PredictS.holdTimeNear), true)
 end
+elseif cmd == "predictholdmax" then
+if not S.abuseMode then return end
+local v = tonumber(arg1)
+if v then
+PredictS.maxHoldTime = math.clamp(v, 0.1, 1.0)
+notifSet("predictholdmax", string.format("MaxHold: %.2fs", PredictS.maxHoldTime), true)
+end
 elseif cmd == "predictrot" or cmd == "predictrotation" then
 if not S.abuseMode then return end
 PredictS.matchRotation = not PredictS.matchRotation
 notifSet("predictrot", PredictS.matchRotation and "PredictRot ON" or "PredictRot OFF", PredictS.matchRotation)
 elseif cmd == "predictinfo" then
-notifSet("predictinfo", string.format("P:%.2f x%.2f %s%s%s%s max%.2f h%d/%.1f/%.1f",
+notifSet("predictinfo", string.format("P:%.2f x%.2f %s%s%s%s%s max%.2f h%d/%.1f/%.1f/cap%.1f",
 PredictS.baseTime, PredictS.userMultiplier,
 PredictS.velocityScale and "V" or "-",
 PredictS.distanceScale and "D" or "-",
 PredictS.gravityComp and "G" or "-",
 PredictS.matchRotation and "R" or "-",
+PredictS.lockLookVector and "L" or "-",
 PredictS.maxTime,
-PredictS.holdThreshold, PredictS.holdTimeFar, PredictS.holdTimeNear), true)
-task.delay(4, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
+PredictS.holdThreshold, PredictS.holdTimeFar, PredictS.holdTimeNear, PredictS.maxHoldTime), true)
+task.delay(5, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
 elseif cmd == "esptransparency" or cmd == "espt" then
 local v = tonumber(arg1)
 if v then S.espAlpha = math.clamp(v, 0.01, 0.95); applyESPTransparency() end
