@@ -83,7 +83,6 @@ npcEspConn = nil,
 aimPart = "Head",
 pullMax = 14,
 pullStart = 7,
-lastStatus = nil,
 }
 local FlyS = {
 flying = false,
@@ -177,81 +176,65 @@ countLabel.TextStrokeTransparency = 0
 countLabel.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 countLabel.Parent = playerCountGui
 local notifGui = Instance.new("ScreenGui")
-notifGui.Name = "SupraNotifGui"
+notifGui.Name = "SA_Notify_" .. math.random(100000, 999999)
 notifGui.ResetOnSpawn = false
 notifGui.IgnoreGuiInset = true
 notifGui.DisplayOrder = 999997
 notifGui.Parent = playerGui
-local notifContainer = Instance.new("Frame")
-notifContainer.BackgroundTransparency = 1
-notifContainer.Size = UDim2.new(0, 200, 0, 500)
-notifContainer.Position = UDim2.new(1, -12, 1, -12)
-notifContainer.AnchorPoint = Vector2.new(1, 1)
-notifContainer.Parent = notifGui
+local notifBox = Instance.new("Frame")
+notifBox.BackgroundTransparency = 1
+notifBox.AnchorPoint = Vector2.new(0, 1)
+notifBox.Position = UDim2.new(0, 12, 1, -12)
+notifBox.Size = UDim2.new(0, 420, 0, 240)
+notifBox.Parent = notifGui
 local notifLayout = Instance.new("UIListLayout")
-notifLayout.FillDirection = Enum.FillDirection.Vertical
-notifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
-notifLayout.Padding = UDim.new(0, 4)
-notifLayout.Parent = notifContainer
+notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+notifLayout.Padding = UDim.new(0, 2)
+notifLayout.Parent = notifBox
+local NOTIF_ON_COLOR = Color3.fromRGB(120, 255, 140)
+local NOTIF_OFF_COLOR = Color3.fromRGB(255, 90, 90)
 local notifActive = {}
-local notifCounter = 10000
-local NOTIF_ON_COLOR = Color3.fromRGB(80, 220, 120)
-local NOTIF_OFF_COLOR = Color3.fromRGB(220, 60, 60)
+local notifOrder = 0
 local function notifSet(key, text, active)
 local entry = notifActive[key]
 if active then
-if entry and entry.frame and entry.frame.Parent then
+if entry and entry.label and entry.label.Parent then
 entry.label.Text = text
-if entry.removeThread then task.cancel(entry.removeThread); entry.removeThread = nil end
-TweenService:Create(entry.frame, TweenInfo.new(0.15), {BackgroundColor3 = NOTIF_ON_COLOR, BackgroundTransparency = 0.15}):Play()
-TweenService:Create(entry.label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+if entry.fadeThread then task.cancel(entry.fadeThread); entry.fadeThread = nil end
+TweenService:Create(entry.label, TweenInfo.new(0.15), {TextColor3 = NOTIF_ON_COLOR, TextTransparency = 0}):Play()
 entry.active = true
 else
-notifCounter = notifCounter - 1
-local frame = Instance.new("Frame")
-frame.BackgroundColor3 = NOTIF_ON_COLOR
-frame.BackgroundTransparency = 0.15
-frame.BorderSizePixel = 0
-frame.Size = UDim2.new(0, 185, 0, 26)
-frame.LayoutOrder = notifCounter
-frame.Parent = notifContainer
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(255, 255, 255)
-stroke.Thickness = 1
-stroke.Transparency = 0.7
-stroke.Parent = frame
+notifOrder = notifOrder + 1
 local label = Instance.new("TextLabel")
 label.BackgroundTransparency = 1
-label.Size = UDim2.new(1, -16, 1, 0)
-label.Position = UDim2.new(0, 8, 0, 0)
-label.Font = Enum.Font.GothamBold
-label.TextSize = 13
 label.Text = text
-label.TextColor3 = Color3.new(1, 1, 1)
+label.TextColor3 = NOTIF_ON_COLOR
+label.TextStrokeTransparency = 0.5
+label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+label.TextSize = 12
+label.Font = Enum.Font.GothamSemibold
 label.TextXAlignment = Enum.TextXAlignment.Left
-label.TextStrokeTransparency = 0.6
-label.TextStrokeColor3 = Color3.new(0, 0, 0)
-label.Parent = frame
-notifActive[key] = {frame = frame, label = label, active = true, removeThread = nil}
+label.Size = UDim2.new(1, 0, 0, 14)
+label.TextTransparency = 1
+label.LayoutOrder = -notifOrder
+label.Parent = notifBox
+TweenService:Create(label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+notifActive[key] = {label = label, active = true, fadeThread = nil}
 end
 else
-if entry and entry.frame and entry.frame.Parent then
+if entry and entry.label and entry.label.Parent then
 entry.active = false
 entry.label.Text = text
-TweenService:Create(entry.frame, TweenInfo.new(0.15), {BackgroundColor3 = NOTIF_OFF_COLOR}):Play()
-if entry.removeThread then task.cancel(entry.removeThread) end
-entry.removeThread = task.delay(1.0, function()
-if entry.frame and entry.frame.Parent then
-local f1 = TweenService:Create(entry.frame, TweenInfo.new(0.35), {BackgroundTransparency = 1})
-local f2 = TweenService:Create(entry.label, TweenInfo.new(0.35), {TextTransparency = 1})
-f1:Play(); f2:Play()
-f1.Completed:Connect(function()
-if entry.frame then entry.frame:Destroy() end
+TweenService:Create(entry.label, TweenInfo.new(0.15), {TextColor3 = NOTIF_OFF_COLOR}):Play()
+if entry.fadeThread then task.cancel(entry.fadeThread) end
+entry.fadeThread = task.delay(1.0, function()
+if entry.label and entry.label.Parent then
+local fade = TweenService:Create(entry.label, TweenInfo.new(0.3), {TextTransparency = 1})
+fade:Play()
+fade.Completed:Wait()
+if entry.label then entry.label:Destroy() end
 if notifActive[key] == entry then notifActive[key] = nil end
-end)
 end
 end)
 end
@@ -890,7 +873,7 @@ local function doSoaKill(target)
 local char = target.Character
 if not char then return false end
 notifTemp("soakill", "Soakill", 1.0)
-local ok, err = pcall(function()
+local ok = pcall(function()
 local RS = game:GetService("ReplicatedStorage")
 if not RS then return end
 local Connections = RS:FindFirstChild("Connections")
@@ -967,51 +950,68 @@ end)
 return ok
 end
 local function startWalkfling()
-if S.walkflingActive then return end
-S.walkflingActive = true
+if S.walkflingActive then return true end
 local char = lp.Character
-if not char then S.walkflingActive = false return end
+if not char then return false end
 local hum = char:FindFirstChildWhichIsA("Humanoid")
-if not hum then S.walkflingActive = false return end
+if not hum then return false end
+local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+if not root then return false end
+S.walkflingActive = true
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
-for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
+for _, v in pairs(c:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
 S.walkflingThread = task.spawn(function()
-repeat RunService.Heartbeat:Wait()
-local character = lp.Character
-local root = getRoot(character)
-local vel, movel = nil, 0.1
-while not (character and character.Parent and root and root.Parent) do
+while S.walkflingActive do
 RunService.Heartbeat:Wait()
-character = lp.Character
-root = getRoot(character)
-end
-vel = root.Velocity
-root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0)
+local character = lp.Character
+if not character then break end
+local r = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+if not r then break end
+local vel = r.Velocity
+r.Velocity = vel * 20000 + Vector3.new(0, 20000, 0)
 RunService.RenderStepped:Wait()
-if character and character.Parent and root and root.Parent then root.Velocity = vel end
+if character and character.Parent and r and r.Parent then r.Velocity = vel end
 RunService.Stepped:Wait()
-if character and character.Parent and root and root.Parent then
-root.Velocity = vel + Vector3.new(0, movel, 0)
-movel = movel * -1
+if character and character.Parent and r and r.Parent then
+r.Velocity = vel + Vector3.new(0, 0.1, 0)
 end
-until S.walkflingActive == false
+end
 if S.walkflingNoclipConn then S.walkflingNoclipConn:Disconnect(); S.walkflingNoclipConn = nil end
 local c = lp.Character
 if c then
-for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = true end end
+for _, v in pairs(c:GetDescendants()) do
+if v:IsA("BasePart") then v.CanCollide = true end
+end
 end
 end)
 notifSet("walkfling", "Walkfling ON", true)
+return true
 end
 local function stopWalkfling()
+if not S.walkflingActive then return end
 S.walkflingActive = false
+if S.walkflingThread then task.cancel(S.walkflingThread); S.walkflingThread = nil end
+if S.walkflingNoclipConn then S.walkflingNoclipConn:Disconnect(); S.walkflingNoclipConn = nil end
+local c = lp.Character
+if c then
+for _, v in pairs(c:GetDescendants()) do
+if v:IsA("BasePart") then v.CanCollide = true end
+end
+end
 notifSet("walkfling", "Walkfling OFF", false)
 end
 local function toggleWalkfling()
-if S.walkflingActive then stopWalkfling() else startWalkfling() end
+if S.walkflingActive then
+stopWalkfling()
+else
+local ok = startWalkfling()
+if not ok then
+notifSet("walkfling", "Walkfling FAILED", false)
+end
+end
 end
 local function setToggleWalkflingKey(keyName)
 if T.WalkflingConn then T.WalkflingConn:Disconnect(); T.WalkflingConn = nil end
@@ -1233,14 +1233,14 @@ end
 FlyS.noclipParts = {}
 end
 local function startFly()
-if not S.abuseMode then return end
-if FlyS.flying then return end
-if SafeFlyS.active then return end
+if not S.abuseMode then return false end
+if FlyS.flying then return true end
+if SafeFlyS.active then return false end
 local char = lp.Character
-if not char then return end
+if not char then return false end
 local humanoid = char:FindFirstChildOfClass("Humanoid")
 local T2 = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-if not humanoid or not T2 then return end
+if not humanoid or not T2 then return false end
 FlyS.flying = true
 FlyS.BG = Instance.new("BodyGyro")
 FlyS.BV = Instance.new("BodyVelocity")
@@ -1286,8 +1286,10 @@ elseif input.KeyCode == Enum.KeyCode.Q then FlyS.control.E = 0 end
 end)
 startNoclip()
 notifSet("fly", "Fly ON", true)
+return true
 end
 local function stopFly()
+if not FlyS.flying then return end
 FlyS.flying = false
 if FlyS.flyKeyDown then FlyS.flyKeyDown:Disconnect(); FlyS.flyKeyDown = nil end
 if FlyS.flyKeyUp then FlyS.flyKeyUp:Disconnect(); FlyS.flyKeyUp = nil end
@@ -1308,14 +1310,14 @@ end
 local function setFlySpeed(speed) FlyS.flySpeed = speed end
 local BASE_SAFE_SPEED = 80
 local function startSafeFly()
-if not S.abuseMode then return end
-if SafeFlyS.active then return end
-if FlyS.flying then return end
+if not S.abuseMode then return false end
+if SafeFlyS.active then return true end
+if FlyS.flying then return false end
 local char = lp.Character
-if not char then return end
+if not char then return false end
 local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
 local hum = char:FindFirstChildOfClass("Humanoid")
-if not hrp or not hum then return end
+if not hrp or not hum then return false end
 SafeFlyS.active = true
 SafeFlyS.bobPhase = 0
 SafeFlyS.noclipParts = {}
@@ -1386,8 +1388,10 @@ elseif input.KeyCode == Enum.KeyCode.E then SafeFlyS.control.Q = 0
 elseif input.KeyCode == Enum.KeyCode.Q then SafeFlyS.control.E = 0 end
 end)
 notifSet("safefly", "SafeFly ON", true)
+return true
 end
 local function stopSafeFly()
+if not SafeFlyS.active then return end
 SafeFlyS.active = false
 if SafeFlyS.thread then SafeFlyS.thread:Disconnect(); SafeFlyS.thread = nil end
 if SafeFlyS.keyDown then SafeFlyS.keyDown:Disconnect(); SafeFlyS.keyDown = nil end
@@ -1413,7 +1417,11 @@ SafeFlyS.control = {F=0,B=0,L=0,R=0,Q=0,E=0}
 notifSet("safefly", "SafeFly OFF", false)
 end
 local function toggleSafeFly()
-if SafeFlyS.active then stopSafeFly() else startSafeFly() end
+if SafeFlyS.active then stopSafeFly()
+else
+local ok = startSafeFly()
+if not ok then notifSet("safefly", "SafeFly FAILED", false) end
+end
 end
 local function setToggleSafeFlyKey(keyName)
 if T.SafeFlyConn then T.SafeFlyConn:Disconnect(); T.SafeFlyConn = nil end
@@ -1431,9 +1439,7 @@ T.SafeFlyKey = #keyName == 1 and keyName:lower() or keyName
 T.SafeFlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
 if cmdBar:IsFocused() then return end
-if input.KeyCode == keyCode then
-if SafeFlyS.active then stopSafeFly() else startSafeFly() end
-end
+if input.KeyCode == keyCode then toggleSafeFly() end
 end)
 end
 local function setSafeFlySpeed(speed) SafeFlyS.speed = speed end
@@ -1531,16 +1537,29 @@ end)
 end)
 end
 local MeleeEvents = { Hit = nil, Swing = nil }
-local function getMeleeEvent(name)
-local ms = ReplicatedStorage:FindFirstChild("MeleeStorage")
-if not ms then return nil end
-local ev = ms:FindFirstChild("Events")
-if not ev then return nil end
-return ev:FindFirstChild(name)
+local function findRemoteEventByName(name)
+local found = nil
+local function scan(parent)
+for _, child in ipairs(parent:GetChildren()) do
+if found then return end
+if child:IsA("RemoteEvent") and child.Name == name then found = child return end
+if child:IsA("Folder") or child:IsA("Model") then scan(child) end
+end
+end
+scan(ReplicatedStorage)
+return found
 end
 local function refreshMeleeEvents()
-MeleeEvents.Hit = getMeleeEvent("Hit")
-MeleeEvents.Swing = getMeleeEvent("Swing")
+local ms = ReplicatedStorage:FindFirstChild("MeleeStorage")
+if ms then
+local ev = ms:FindFirstChild("Events")
+if ev then
+MeleeEvents.Hit = ev:FindFirstChild("Hit")
+MeleeEvents.Swing = ev:FindFirstChild("Swing")
+end
+end
+if not MeleeEvents.Hit then MeleeEvents.Hit = findRemoteEventByName("Hit") end
+if not MeleeEvents.Swing then MeleeEvents.Swing = findRemoteEventByName("Swing") end
 end
 refreshMeleeEvents()
 local NPC_PATHS = {
@@ -1761,13 +1780,13 @@ local dirToMe = (playerHeadPos - partPos).Unit
 return partPos + dirToMe * pull
 end
 local function startAura()
-if AuraS.active then return end
-if not S.abuseMode then return end
+if AuraS.active then return true end
+if not S.abuseMode then return false end
 refreshMeleeEvents()
 if not MeleeEvents.Hit then
 notifSet("aura", "Aura FAILED (no remotes)", false)
 if showNotify then showNotify("Aura: No Hit remote", C.REJECT) end
-return
+return false
 end
 AuraS.active = true
 notifSet("aura", "Aura ON", true)
@@ -1806,15 +1825,22 @@ end
 end
 end
 end)
+return true
 end
 local function stopAura()
+if not AuraS.active then return end
 AuraS.active = false
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
 notifSet("aura", "Aura OFF", false)
 if showNotify then showNotify("Aura: OFF", C.SUBTEXT) end
 end
 local function toggleAura()
-if AuraS.active then stopAura() else startAura() end
+if AuraS.active then
+stopAura()
+else
+local ok = startAura()
+if not ok then notifSet("aura", "Aura FAILED", false) end
+end
 end
 local function setAuraReach(n) AuraS.reach = math.clamp(tonumber(n) or 21, 1, 30) end
 local function setAuraPart(partName)
@@ -2227,7 +2253,10 @@ T.FlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
 if cmdBar:IsFocused() then return end
 if input.KeyCode == keyCode then
-if FlyS.flying then stopFly() else startFly() end
+if FlyS.flying then stopFly() else
+local ok = startFly()
+if not ok then notifSet("fly", "Fly FAILED", false) end
+end
 end
 end)
 end
@@ -2425,15 +2454,15 @@ local infoList = Instance.new("UIListLayout")
 infoList.Padding = UDim.new(0,2)
 infoList.Parent = infoScroll
 local COMMAND_INFO = {
-{"esp [player]", "Toggle ESP on player (or all)"},
-{"esp all/others/friends/bacons", "ESP to groups"},
+{"esp [player]", "Toggle ESP on player"},
+{"esp all/others/friends/bacons", "ESP groups"},
 {"unesp [player]", "Remove ESP"},
 {"toggleesp [key]", "Bind ESP key"},
 {"togglefc [key]", "Bind Freecam key"},
-{"view / spectate n", "Spectate a player"},
-{"unview / unspectate", "Stop spectating"},
-{"freecam / fc", "Toggle free camera"},
-{"unfreecam / unfc", "Exit freecam"},
+{"view / spectate n", "Spectate player"},
+{"unview", "Stop spectating"},
+{"freecam / fc", "Toggle freecam"},
+{"unfreecam", "Exit freecam"},
 {"fcspeed n", "Set freecam speed"},
 {"fixcam", "Reset camera"},
 {"fb / fullbright", "Enable fullbright"},
@@ -2441,33 +2470,33 @@ local COMMAND_INFO = {
 {"day / night / nofog", "Lighting tweaks"},
 {"rejoin / rj", "Rejoin server"},
 {"espt n", "Set ESP transparency"},
-{"copyname [player]", "Copy player name"},
+{"copyname [player]", "Copy name"},
 {"antilag / boostfps", "Reduce graphics"},
 {"abuse / unabuse", "Abuse mode"},
-{"playercount", "Toggle player alerts"},
+{"playercount", "Toggle join alerts"},
 }
 local ABUSE_COMMANDS = {
-{"soakill [player]", "Kill player (needs remote)"},
+{"soakill [player]", "Kill player"},
 {"fling [player]", "Fling with predict"},
 {"fling2 [player]", "Fling walkfling + predict"},
-{"goto [player]", "Teleport to a player"},
+{"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
-{"aimbot", "Load aimbot script"},
-{"ia", "Load Ninni Hub script"},
-{"havoc", "Load Havoc script"},
+{"aimbot", "Load aimbot"},
+{"ia", "Load Ninni Hub"},
+{"havoc", "Load Havoc"},
 {"aura / unaura / toggleaura", "Aura toggle"},
 {"aurareach n", "Set aura range"},
 {"aurapart [part]", "Set aura aim part"},
 {"toggleaurakey [key]", "Bind aura toggle"},
 {"ignorenpcs / npcs", "Hide/Show NPC ESP"},
-{"rspy / remotespy", "Load Cobalt remote spy"},
+{"rspy / remotespy", "Load remote spy"},
 {"simplespy", "Load SimpleSpy V3"},
 {"jerk", "Load jerk tool"},
-{"fly / unfly", "Toggle fly + noclip"},
+{"fly / unfly", "Toggle fly"},
 {"togglefly [key]", "Bind fly toggle"},
 {"flyspeed n", "Set fly speed"},
-{"safefly / unsafefly", "TP-based smooth fly"},
+{"safefly / unsafefly", "Smooth TP fly"},
 {"togglesafefly [key]", "Bind safefly toggle"},
 {"safeflyspeed n", "Set safefly speed"},
 }
@@ -2724,7 +2753,8 @@ if not S.abuseMode then return end
 if arg1 then local t = findPlayer(arg1); if t then doFling2(t) end end
 elseif cmd == "walkfling" then
 if not S.abuseMode then return end
-startWalkfling()
+local ok = startWalkfling()
+if not ok then notifSet("walkfling", "Walkfling FAILED", false) end
 elseif cmd == "unwalkfling" or cmd == "nowalkfling" then
 if not S.abuseMode then return end
 stopWalkfling()
@@ -2751,7 +2781,10 @@ elseif cmd == "simplespy" then if not S.abuseMode then return end doSimpleSpy()
 elseif cmd == "jerk" then if not S.abuseMode then return end doJerk()
 elseif cmd == "fly" then
 if not S.abuseMode then return end
-if FlyS.flying then stopFly() else startFly() end
+if FlyS.flying then stopFly() else
+local ok = startFly()
+if not ok then notifSet("fly", "Fly FAILED", false) end
+end
 elseif cmd == "unfly" or cmd == "nofly" then
 if not S.abuseMode then return end
 if FlyS.flying then stopFly() end
@@ -2761,7 +2794,10 @@ local v = tonumber(arg1)
 if v and v > 0 then setFlySpeed(v) end
 elseif cmd == "safefly" then
 if not S.abuseMode then return end
-if SafeFlyS.active then stopSafeFly() else startSafeFly() end
+if SafeFlyS.active then stopSafeFly() else
+local ok = startSafeFly()
+if not ok then notifSet("safefly", "SafeFly FAILED", false) end
+end
 elseif cmd == "unsafefly" or cmd == "nosafefly" then
 if not S.abuseMode then return end
 if SafeFlyS.active then stopSafeFly() end
